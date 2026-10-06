@@ -13,8 +13,8 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## [DotGameModule]'s order runs, a cvar is typed at a console and a round is played by
 ## nothing but the stand-ins the module seats itself.
 
-const SECTIONS := 7
-const CHECKS := 27
+const SECTIONS := 8
+const CHECKS := 34
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -53,6 +53,7 @@ func _run() -> void:
 		await _test_the_module_loads()
 		_test_the_commands()
 		await _test_a_round_runs()
+		await _test_the_course_vote()
 		await _test_it_unloads_cleanly()
 
 	_test_no_message_preloads_itself()
@@ -238,6 +239,54 @@ func _test_a_round_runs() -> void:
 	_check(not rounds.is_empty(), "and a round was decided", str(rounds))
 	_check(not rounds.is_empty() and str(rounds[0][2]) != "", "with a sentence saying why", str(rounds))
 	_check(_said(_run_command("dr_status"), "round"), "and dr_status still answers")
+	_finished()
+
+
+## The players' vote decides the next course: a ballot over the server's courses, one vote
+## cast, and the round's end puts the winner on the next round. Driven by hand rather than by
+## the clock, because stand-ins are not voters and a server of stand-ins never opens one.
+func _test_the_course_vote() -> void:
+	_section("the course vote")
+	var module := _module()
+	var vote: Node = module.get("vote") if module != null else null
+	_check(vote != null, "the module built a course vote")
+
+	if vote == null:
+		_finished()
+		return
+
+	_check(server.console.find_command("vote") != null if server.console.has_method("find_command") else true,
+		"and registered dot-vote's vote command")
+
+	# Every course in the directory, not only this suite's practice course.
+	game.config.course_ids = PackedStringArray()
+	vote.call("refresh_courses")
+	var ids: Array = []
+
+	for choice: DotVoteChoice in (vote.get("source") as DotVoteListSource).entries:
+		ids.append(String(choice.id))
+
+	_check(ids.has("dr_ice_works") and ids.has("dr_foundry"), "it offers the delivered courses", str(ids))
+
+	vote.set("voters_fn", func() -> Array: return [&"7"])
+	var director: DotVoteDirector = vote.get("director")
+	var opened := director.open_vote(DotVoteClock.REASON_MANUAL)
+	_check(opened.ok and director.is_voting(), "a ballot opens", opened.error.message if not opened.ok else "")
+
+	var cast := director.cast_one(&"7", &"dr_foundry")
+	# Everybody has voted; the director closes on its next advance, which is the server's tick.
+	director.advance(0.05)
+	_check(cast.ok and director.pending_id() == &"dr_foundry", "one vote decides it, waiting for the round's end",
+		"%s %s" % [cast.ok, director.pending_id()])
+
+	# No frame between these: the stand-ins' rounds are still running, and one that started in
+	# between would lay the voted course itself and leave this check reading the rotation's.
+	vote.call("note_round_end")
+	_check(game.next_course_id == &"dr_foundry", "the round's end hands it to the world", str(game.next_course_id))
+
+	game.call("_lay_out_course")
+	_check(game.stage.id() == &"dr_foundry" and game.next_course_id == &"",
+		"and the next course laid is the one voted for, once", "%s / %s" % [game.stage.id(), game.next_course_id])
 	_finished()
 
 

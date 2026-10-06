@@ -99,3 +99,7 @@ Every surface is [Kenney's](https://kenney.nl) **Prototype Textures**, tinted pe
 MIT. See [LICENSE](LICENSE).
 
 The art is the exception, and it is a more permissive one: the prototype textures, the characters and the weapon models are CC0 1.0, public domain with no attribution required. Each kit's own licence text ships unchanged beside the files it covers.
+
+## Voting for the next course
+
+Part way into every course the players vote for the next one (`!vote 2`, `!rtv`, `!nominate dr_foundry`), and the next round plays the winner. A server owner configures it in `user://cfg/deathrun_vote.json`, keyed as dot-vote's `DotVoteRules`; `{"enabled": false}` turns it off. `dr_vote_after` is how many seconds into a course the ballot opens.

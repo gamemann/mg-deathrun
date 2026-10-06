@@ -141,6 +141,10 @@ var progress: DrProgress = null
 ## player id -> DrPlayer.
 var players: Dictionary = {}
 
+## The course the next round plays, set by the players' vote ([code]game/dr_vote.gd[/code]) or
+## an operator, and used once. Empty lets the rotation choose.
+var next_course_id: StringName = &""
+
 ## player id -> side: [constant RUNNERS] or [constant ACTIVATORS].
 var sides: Dictionary = {}
 
@@ -885,10 +889,20 @@ func _lay_out_course() -> void:
 	if catalogue == null:
 		return
 
-	var doc := catalogue.next_course(
-		config.course_ids, config.shuffle_courses, random.stream(&"course"),
-		StringName(str(course_doc.get("id", "")))
-	)
+	var doc: Dictionary = {}
+
+	# What the players voted for, once, if it is still a course this server plays (a
+	# dr_reload between the vote and the round can take it away). The rotation otherwise.
+	if next_course_id != &"" and catalogue.playable_courses(config.course_ids).has(next_course_id):
+		doc = catalogue.courses[next_course_id]
+
+	next_course_id = &""
+
+	if doc.is_empty():
+		doc = catalogue.next_course(
+			config.course_ids, config.shuffle_courses, random.stream(&"course"),
+			StringName(str(course_doc.get("id", "")))
+		)
 
 	build_stage(doc)
 	_place_everybody()

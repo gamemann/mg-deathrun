@@ -27,9 +27,10 @@ game/
   dr_client.gd       one local player, alone or against a server; poses the course per frame
   dr_module.gd       the DotGameModule: cvars, dr_status / dr_courses / dr_traps / dr_reload, stand-ins
   dr_services.gd     chat, voice (team by default) and moderation over dot-game's base
+  dr_vote.gd         the players' vote for the next course, over dot-vote
   net/               the codec (STAGE, TEAM, TRAP, FINISHED…), the link, the player behaviour, the bridge
 courses/             link to ../mg-deathrun-maps/courses (generated there); README.md is the format
-examples/            headless_run (86), headless_courses (every course played), headless_net (39), dedicated (27)
+examples/            headless_run (86), headless_courses (every course played), headless_net (39), dedicated (34)
 tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes
 ```
 
@@ -87,7 +88,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/*' | while read
 godot --headless --path . res://examples/headless_run.tscn       # 21 sections, 86 checks
 godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
 godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 39 checks
-godot --headless --path . res://examples/dedicated.tscn          # 7 sections, 27 checks, and the exit probe
+godot --headless --path . res://examples/dedicated.tscn          # 8 sections, 34 checks, and the exit probe
 ../mg-deathrun-maps/tools/build_courses.py --check               # the courses are what the builder writes
 godot --headless --path . res://tools/trace_run.tscn -- --course=dr_ice_works --every=0.25
 tools/shot.sh --view=activator
@@ -110,6 +111,10 @@ The courses are their own repository and pack, [mg-deathrun-maps](../mg-deathrun
 ## Choosing a side, unseen activators, points and the Tab board (2026-10-06)
 
 From the brief. **A player chooses a side** in chat (`!activator`, `!runner`, `!any`: module commands, so chat reaches them as it reaches every command): `DrGame._draw_sides` still shuffles on the round's seed and still skips last round's activators, then orders the hat volunteers, the undecided, and last anybody who asked to run, who is drawn only when the round would otherwise have no activator, because it must have one (`allow_side_choice`). **The ratio is one activator per 8 players, at most 6** (was 10 and 3): the brief asked for about five to forty, which the old numbers could never reach. **Runners do not see the activators** behind the walls (`activators_seen` off): a runner's client draws them as it draws its own body, not at all, except in the showdown. **Points**: `winner_points` (10) to everybody on the winning side and `first_across_points` (5), replicated as `net_points` with `net_ping` (dot-server's session ping), on dot-ui's `DotScoreboardScreen` under Tab with a colour swatch, the name, the side, points and ping. Not rendered here: the board is the component rendered in mg-wipeout the same night. `headless_run`'s *a player's choice of side counts in the draw* (3 checks), the ratio checks, and a points check on the runners' win.
+
+## The course vote (2026-10-06)
+
+The brief asked for map voting. **A round here is a course**, so dot-vote's ROUND_END trigger — open at a round's end, apply at the next one's — is one course late. `DrVote` uses MANUAL instead: a ballot opens `dr_vote_after` (20) seconds into every course and is applied at the round's end (`apply: END_OF_ROUND`), when `DrGame.next_course_id` is set and the next `_lay_out_course` uses it once. A rocked vote also waits for the round's end (`rtv_apply`), because changing the floor mid-round kills everybody on it. No time limit (`duration_sec` 0), the current course is on the ballot, and the cooldown is off: a server with two courses would otherwise offer nothing. Stand-ins are not voters, so a server of stand-ins never opens one. dot-vote's whole command set comes with it (`!vote`, `!rtv`, `!nominate`, `setnextmap`…), and the client shell draws the ballot from the `map_ballot` notice. An owner reshapes any of it in `user://cfg/deathrun_vote.json` or `game.yml`'s `metadata: course_vote:`, keyed as `DotVoteRules`; `{"enabled": false}` leaves the rotation alone. `dedicated`'s *the course vote* (7 checks) casts one vote and lays the course it chose. Its first version awaited a frame between the round's end and the check, and a stand-in round that started in that frame laid the voted course itself: the check is synchronous now. Not yet tried in a browser.
 
 ## Still to do
 
