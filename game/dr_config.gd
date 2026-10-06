@@ -59,13 +59,15 @@ extends DotConfig
 
 ## One activator for every this many players, and always at least one.
 ##
-## [b]Ten, which on a full server of twenty-four is two.[/b] One person with every button on a
-## crowded server cannot keep up with a course's worth of runners spread along it; two halve
-## the corridor. More than that and the buttons are fought over.
-@export_range(2, 64, 1) var players_per_activator: int = 10
+## [b]Eight, which on a full server of twenty-four is three and on forty is five.[/b] One
+## person with every button on a crowded server cannot keep up with a course's worth of
+## runners spread along it. It was ten (at most three) until 2026-10-06; the brief asked for
+## about five activators to forty runners, which ten and three could never reach.
+@export_range(2, 64, 1) var players_per_activator: int = 8
 
-## The most activators a round has, whatever the count above asks for.
-@export_range(1, 8, 1) var max_activators: int = 3
+## The most activators a round has, whatever the count above asks for. More than six and the
+## buttons are fought over.
+@export_range(1, 8, 1) var max_activators: int = 6
 
 ## Whether somebody who was an activator last round may be drawn again this round.
 ##
@@ -73,6 +75,21 @@ extends DotConfig
 ## activator is the role everybody wants a turn at; drawing the same person twice running is
 ## read as the server playing favourites even when it was a fair draw.
 @export var activator_may_repeat: bool = false
+
+## Whether a player's own choice of side counts (`!activator`, `!runner`, `!any` in chat):
+## volunteers are drawn first, and somebody who asked to run is drawn only when nobody else
+## can be. Off, everybody is in the one hat.
+@export var allow_side_choice: bool = true
+
+## Whether a runner sees the activators. Off by default: they stand behind the course's
+## walls watching, and the brief is that the runners cannot see them. In the showdown they
+## are always seen, because they are fighting.
+@export var activators_seen: bool = false
+
+## Points for each player on the side that wins a round, and for the first runner across.
+## They add up over a match and show on the Tab board.
+@export_range(0, 100, 1) var winner_points: int = 10
+@export_range(0, 100, 1) var first_across_points: int = 5
 
 # --- The players -----------------------------------------------------------
 

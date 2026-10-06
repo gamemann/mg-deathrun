@@ -58,6 +58,9 @@ var game: DrGame = null
 var player: DrPlayer = null
 var camera: Camera3D = null
 var hud: DrHud = null
+
+## The Tab board. See [method board_rows].
+var board: DotScoreboardScreen = null
 var chat: DrClientChat = null
 
 ## What the game sounds like. See [DrAudio].
@@ -709,6 +712,73 @@ func _build_hud() -> void:
 	hud.name = "Hud"
 	add_child(hud)
 
+	# dot-ui's scoreboard, this game's columns: a swatch, the name, the side, points, ping.
+	board = DotScoreboardScreen.new()
+	board.name = "Board"
+	board.title_text = "Deathrun"
+	board.columns = [
+		{"key": &"avatar", "kind": &"icon", "width": 0.0, "size": 22.0},
+		{"key": &"name", "title": "Player", "width": 3.0},
+		{"key": &"side", "title": "Side", "width": 1.4},
+		{"key": &"points", "title": "Points", "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"key": &"ping", "title": "Ping", "align": HORIZONTAL_ALIGNMENT_RIGHT},
+	]
+	board.row_fn = board_rows
+	board.visible = false
+	board.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud.add_child(board)
+
+
+func _show_board(on: bool) -> void:
+	if board == null:
+		return
+	board.visible = on
+	if on:
+		board.title_text = "Deathrun  -  %s" % str(game.course_doc.get("name", "")) if game != null else "Deathrun"
+		board.refresh()
+
+
+## The rows: best points first. Public so a suite can read them.
+func board_rows() -> Array:
+	var rows: Array = []
+	if game == null:
+		return rows
+	var ids := game.players.keys()
+	ids.sort_custom(func(a: StringName, b: StringName) -> bool:
+		var pa: DrPlayer = game.players[a]
+		var pb: DrPlayer = game.players[b]
+		if pa.points != pb.points:
+			return pa.points > pb.points
+		return String(a) < String(b)
+	)
+	for id in ids:
+		var who: DrPlayer = game.players[id]
+		var side := game.team_of(id)
+		rows.append({
+			&"avatar": _swatch(who),
+			&"name": who.display_name,
+			&"side": "Activator" if side == DrGame.ACTIVATORS else ("Runner" if side == DrGame.RUNNERS else "-"),
+			&"points": who.points,
+			&"ping": (str(who.ping_ms) if who.ping_ms >= 0 else "-"),
+			"highlight": who == player,
+		})
+	return rows
+
+
+var _swatches: Dictionary = {}
+
+## A square in the player's own colour, standing in for an avatar picture. Spread by the
+## golden ratio, because Godot's string hash is near-sequential for similar ids.
+func _swatch(who: DrPlayer) -> Texture2D:
+	if _swatches.has(who.player_id):
+		return _swatches[who.player_id]
+	var image := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	var hue := fposmod(float(posmod(hash(String(who.player_id)), 100003)) * 0.6180339887, 1.0)
+	image.fill(Color.from_hsv(hue, 0.6, 0.9))
+	var texture := ImageTexture.create_from_image(image)
+	_swatches[who.player_id] = texture
+	return texture
+
 
 ## The chat box, before the netcode and before any player exists.
 ##
@@ -1084,9 +1154,18 @@ static func present_frame(
 		var at := drawn_position(body, networked and not mine)
 		var colour := p_game.side_colour(p_game.team_of(key))
 
+		# A runner does not see the activators behind the walls, except in the showdown,
+		# where they are fighting. Drawn as though it were the camera's own body: not at all.
+		var unseen := (
+			not p_game.config.activators_seen and own != null and not mine
+			and p_game.team_of(own.player_id) == DrGame.RUNNERS
+			and p_game.team_of(key) == DrGame.ACTIVATORS
+			and p_game.phase != DrGame.Phase.SHOWDOWN
+		)
+
 		# And whoever a spectator is looking out of: a camera inside somebody's head draws the
 		# inside of their head.
-		if body.present_body((mine and first_person) or body == watched, at, colour):
+		if body.present_body((mine and first_person) or body == watched or unseen, at, colour):
 			shown += 1
 
 		# Every player's beacon, this client's own included — somebody who has been beaconed
@@ -1113,6 +1192,11 @@ static func drawn_position(body: DrPlayer, remote: bool) -> Vector3:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The Tab board, held: shown while the key is down.
+	if event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_TAB and not event.is_echo():
+		_show_board(event.is_pressed())
+		return
+
 	if event is InputEventMouseButton and event.pressed and not _captured:
 		# Handled BEFORE the player guard below, because somebody clicks while the world is
 		# still loading more often than not, and a click swallowed for want of a player is a

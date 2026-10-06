@@ -819,6 +819,23 @@ func _draw_sides() -> void:
 	var stream := random.stream(&"activators")
 	_shuffle(hat, stream)
 
+	# The players' own choices, after the shuffle so each group stays in drawn order:
+	# volunteers first, the undecided next, and anybody who asked to run last — drawn only if
+	# the round would otherwise be short of an activator, because there must always be one.
+	if config.allow_side_choice:
+		var keen: Array = []
+		var either: Array = []
+		var reluctant: Array = []
+		for id: StringName in hat:
+			match (players[id] as DrPlayer).side_wish:
+				ACTIVATORS:
+					keen.append(id)
+				RUNNERS:
+					reluctant.append(id)
+				_:
+					either.append(id)
+		hat = keen + either + reluctant
+
 	var drawn: Array[StringName] = []
 
 	for index in range(mini(wanted, hat.size())):
@@ -828,6 +845,13 @@ func _draw_sides() -> void:
 
 	for id: StringName in ids:
 		_set_side(id, ACTIVATORS if drawn.has(id) else RUNNERS)
+
+
+## A player's choice of side, from chat. Server side. Takes effect at the next draw.
+func wish_side(id: StringName, side: int) -> void:
+	var player: DrPlayer = players.get(id)
+	if player != null:
+		player.side_wish = side if side == RUNNERS or side == ACTIVATORS else 0
 
 
 func _set_side(id: StringName, side: int) -> void:
@@ -999,6 +1023,12 @@ func _decide(winner: int, why: String) -> void:
 	_decided = true
 	_winner = winner
 	_winner_name = why
+
+	if authoritative and winner != 0:
+		for id: StringName in players:
+			if team_of(id) == winner:
+				(players[id] as DrPlayer).points += config.winner_points
+
 	DotLog.info(CHANNEL, "the round is decided", {"winner": winner, "why": why})
 
 
@@ -1162,6 +1192,8 @@ func _finish(player: DrPlayer) -> void:
 	player.finished = true
 	player.place = _finish_count
 	player.finish_seconds = run_elapsed
+	if authoritative and _finish_count == 1:
+		player.points += config.first_across_points
 	_send_to_end(player, true, _finish_count - 1)
 
 	if progress != null:

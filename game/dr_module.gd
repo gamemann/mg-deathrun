@@ -142,6 +142,10 @@ func _game_load() -> DotResult:
 	add_command("dr_courses", _cmd_courses, "List the courses, and any refused file")
 	add_command("dr_traps", _cmd_traps, "List this course's traps, and which are spent")
 	add_command("dr_reload", _cmd_reload, "Read the course directory again (next round)")
+	# A player's choice of side, from chat as !activator / !runner / !any.
+	add_command("activator", _cmd_wish.bind(DrGame.ACTIVATORS), "Ask to be an activator in the next draw", "")
+	add_command("runner", _cmd_wish.bind(DrGame.RUNNERS), "Ask to run in the next draw", "")
+	add_command("any", _cmd_wish.bind(0), "Either side in the next draw", "")
 	add_command("dr_say", _cmd_say, "Say something to everybody, as the server")
 
 	_wire_chat()
@@ -370,6 +374,18 @@ func _game_tick(_tick: int, delta: float) -> void:
 
 	_since_roster_check = 0.0
 	_keep_the_round_full()
+	_note_pings()
+
+
+## Each session's ping onto its player, for the Tab board. dot-server already keeps it.
+func _note_pings() -> void:
+	var world := game as DrGame
+	if world == null or server == null:
+		return
+	for session in server.playing_sessions():
+		var who: DrPlayer = world.players.get(DrNetBridge.player_key(session.userid))
+		if who != null:
+			who.ping_ms = session.ping_ms
 
 
 func _keep_the_round_full() -> void:
@@ -507,6 +523,21 @@ func _on_chat_command(peer_id: int, command: String, args: PackedStringArray) ->
 		session.uid(), command, args, DotCmdContext.Source.CHAT
 	):
 		bridge.call("notice", peer_id, reply)
+
+
+func _cmd_wish(ctx: DotCmdContext, side: int) -> void:
+	var world := game as DrGame
+	if world == null or ctx.session == null:
+		ctx.reply("Only a player can choose a side.")
+		return
+	if not world.config.allow_side_choice:
+		ctx.reply("Sides are drawn on this server.")
+		return
+	world.wish_side(DrNetBridge.player_key(ctx.session.userid), side)
+	ctx.reply(
+		"You will be drawn as an activator first." if side == DrGame.ACTIVATORS
+		else ("You will only activate if nobody else can." if side == DrGame.RUNNERS else "Either side.")
+	)
 
 
 func _cmd_say(ctx: DotCmdContext) -> void:

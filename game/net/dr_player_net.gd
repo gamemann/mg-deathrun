@@ -48,6 +48,10 @@ var net_health: float = 100.0
 
 ## Whether they are across the line, and whether they are in the end arena.
 var net_finished: bool = false
+
+## Points this match and the server's ping for the player, for everybody's Tab board.
+var net_points: int = 0
+var net_ping: int = 0
 var net_at_end: bool = false
 
 ## Sitting this round out, having joined after it started.
@@ -121,6 +125,8 @@ func _register_net_vars() -> void:
 
 	replicate(&"net_health", DotNetVar.Type.FLOAT_RANGE).range_of(0.0, 1000.0).bits(12)
 	replicate(&"net_finished", DotNetVar.Type.BOOL)
+	replicate(&"net_points", DotNetVar.Type.UINT).bits(16)
+	replicate(&"net_ping", DotNetVar.Type.UINT).bits(10)
 	replicate(&"net_at_end", DotNetVar.Type.BOOL)
 	replicate(&"net_watching", DotNetVar.Type.BOOL)
 
@@ -201,6 +207,8 @@ func pull() -> void:
 		net_health = player.health.health
 
 	net_finished = player.finished
+	net_points = clampi(player.points, 0, 65535)
+	net_ping = clampi(player.ping_ms, 0, 1023)
 	net_at_end = player.at_end
 	net_watching = player.watching
 	net_blind = player.blinded
@@ -287,6 +295,8 @@ func _adopt() -> void:
 		player.health.alive = net_health > 0.0
 
 	player.finished = net_finished
+	player.points = net_points
+	player.ping_ms = net_ping
 	player.at_end = net_at_end
 	player.watching = net_watching
 

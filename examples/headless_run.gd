@@ -19,9 +19,9 @@ const DrProgress := preload("../game/dr_progress.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 21
+const SECTIONS := 22
 
-const CHECKS := 86
+const CHECKS := 91
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -65,6 +65,7 @@ func _run() -> void:
 	await _test_a_late_joiner()
 	await _test_a_bot_at_the_buttons()
 	await _test_progress()
+	await _test_side_choice()
 
 	for world in _worlds.duplicate():
 		await _dispose(world)
@@ -102,9 +103,10 @@ func _test_config() -> void:
 	var config := DrConfig.new()
 	_check(config.validate().ok, "the defaults validate")
 	_check(config.activators_for(1) == 0, "one person is not a round")
-	_check(config.activators_for(2) == 1 and config.activators_for(19) == 1,
-		"one activator up to nineteen players")
-	_check(config.activators_for(20) == 2, "two at twenty")
+	_check(config.activators_for(2) == 1 and config.activators_for(15) == 1,
+		"one activator up to fifteen players")
+	_check(config.activators_for(16) == 2, "two at sixteen")
+	_check(config.activators_for(40) == 5, "and five at forty, which the brief asked for")
 	_check(config.activators_for(200) == config.max_activators, "never more than the most",
 		"%d" % config.activators_for(200))
 
@@ -573,6 +575,8 @@ func _test_the_runners_win() -> void:
 	await _step(game, 3)
 	_check(ended.size() == 1 and int(ended[0][1]) == DrGame.RUNNERS, "the runners won", str(ended))
 	_check(_died(deaths, activator.player_id, runner.player_id), "the kill is the runner's")
+	_check(runner.points == game.config.winner_points + game.config.first_across_points and activator.points == 0,
+		"the runner has the win's points and first across; the activator none (%d, %d)" % [runner.points, activator.points])
 
 	var second := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
 	var others := await _round(second, 3)
@@ -610,6 +614,45 @@ func _test_the_clock() -> void:
 	draw.run_elapsed = 29.95
 	await _step(draw, int(0.4 * TICK_RATE))
 	_check(drawn.size() == 1 and int(drawn[0][1]) == 0, "with `timeout_winner 0` it is a draw", str(drawn))
+	_finished()
+
+
+func _test_side_choice() -> void:
+	_section("a player's choice of side counts in the draw")
+	var game := await _world()
+	for i in range(6):
+		var _p := game.add_player(StringName("c%d" % i), "Chooser %d" % i)
+	# Six players is one activator. Everybody but c3 asks to run; c3 volunteers.
+	for i in range(6):
+		game.wish_side(StringName("c%d" % i), DrGame.RUNNERS)
+	game.wish_side(&"c3", DrGame.ACTIVATORS)
+	game._last_activators.clear()
+	game._draw_sides()
+	_check(game.team_of(&"c3") == DrGame.ACTIVATORS, "a volunteer is drawn first")
+
+	# Nobody volunteers and two would rather run: one of the other four is drawn.
+	for i in range(6):
+		game.wish_side(StringName("c%d" % i), 0)
+	game.wish_side(&"c0", DrGame.RUNNERS)
+	game.wish_side(&"c1", DrGame.RUNNERS)
+	var drawn_reluctant := 0
+	for round_number in range(8):
+		game._last_activators.clear()
+		game._draw_sides()
+		if game.team_of(&"c0") == DrGame.ACTIVATORS or game.team_of(&"c1") == DrGame.ACTIVATORS:
+			drawn_reluctant += 1
+	_check(drawn_reluctant == 0, "somebody who asked to run is not drawn while others can be")
+
+	# Everybody would rather run: there is still an activator.
+	for i in range(6):
+		game.wish_side(StringName("c%d" % i), DrGame.RUNNERS)
+	game._last_activators.clear()
+	game._draw_sides()
+	var activators := 0
+	for i in range(6):
+		if game.team_of(StringName("c%d" % i)) == DrGame.ACTIVATORS:
+			activators += 1
+	_check(activators == 1, "and when everybody would rather run, one still activates")
 	_finished()
 
 

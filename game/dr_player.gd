@@ -58,6 +58,14 @@ var stage: DrCourse = null
 ## Which side they are on this round: [constant DrGame.RUNNERS] or [constant DrGame.ACTIVATORS].
 var team: int = 0
 
+## Which side this player asked for: 0 either, RUNNERS or ACTIVATORS. Server side; read by
+## the draw. See [member DrConfig.allow_side_choice].
+var side_wish: int = 0
+
+## Points this match, and the server's last ping for this player (-1 unknown). Tab board.
+var points: int = 0
+var ping_ms: int = -1
+
 ## The entity id dot-combat and dot-entity know them by.
 var entity_id: int = 0
 

@@ -107,6 +107,10 @@ tools/shot.sh --view=trap --trap=ice_jaws --after=0.25 --dr-course-ids=dr_ice_wo
 
 The game's pack contains `courses/` (a real directory here, not mg-wipeout's link), so a delivered server plays every course with nothing else installed. mg-wipeout's `_add_delivered_courses` is kept in the module, so splitting the courses into their own `server_dependencies` pack later is a `game.yml` line and no code.
 
+## Choosing a side, unseen activators, points and the Tab board (2026-10-06)
+
+From the brief. **A player chooses a side** in chat (`!activator`, `!runner`, `!any`: module commands, so chat reaches them as it reaches every command): `DrGame._draw_sides` still shuffles on the round's seed and still skips last round's activators, then orders the hat volunteers, the undecided, and last anybody who asked to run, who is drawn only when the round would otherwise have no activator, because it must have one (`allow_side_choice`). **The ratio is one activator per 8 players, at most 6** (was 10 and 3): the brief asked for about five to forty, which the old numbers could never reach. **Runners do not see the activators** behind the walls (`activators_seen` off): a runner's client draws them as it draws its own body, not at all, except in the showdown. **Points**: `winner_points` (10) to everybody on the winning side and `first_across_points` (5), replicated as `net_points` with `net_ping` (dot-server's session ping), on dot-ui's `DotScoreboardScreen` under Tab with a colour swatch, the name, the side, points and ping. Not rendered here: the board is the component rendered in mg-wipeout the same night. `headless_run`'s *a player's choice of side counts in the draw* (3 checks), the ratio checks, and a points check on the runners' win.
+
 ## Still to do
 
 In the order they are worth doing.
