@@ -124,7 +124,7 @@ A trap waits `trap_tell_seconds` (0.35) after its button before it moves, and it
 
 In the order they are worth doing.
 
-1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. Then a `content/deathrun/` and a `deathrun_client` suite in dot-server-deploy, the way `wipeout_client` checks a delivered wipeout — the one suite that runs a game from a mounted pack.
+1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. dot-server-deploy has `content/deathrun/` and `content/deathrun_maps/` and `examples/deathrun_client` (19 checks, 2026-10-06): the delivered pack boots, a real client joins over a real socket, the courses are mounted where `_add_delivered_courses` looks, and the client builds the server's course and traps from the document. What is left is the owner's: the repositories, the release order, publishing.
 2. **Bunny-hop sections.** `auto_bunny_hop` and the air control are there; no course yet has a stretch built for them.
 3. **A world model in a watcher's hands**, as mg-smash-copter's list says.
 4. **Sounds for the machinery**: a trapdoor's bang, a saw's whine, the crusher's thud — today every trap is one synthesised impact.

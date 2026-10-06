@@ -10,9 +10,9 @@
 # neither of which this file can know. What is written here for them is a placeholder.
 #
 # Paths are relative to the pack's mount point, which is also this repository's root.
-# Not yet in dot-server-deploy's content/ (2026-10-05): this game has not been published.
-# When it is, keep scene, client_scene and module in step with that copy;
-# dot-server-deploy's examples/install_descriptor suite fails when the two disagree.
+# dot-server-deploy's content/deathrun/ is this game's copy there (2026-10-06): keep scene,
+# client_scene and module in step with it; its examples/install_descriptor suite fails when
+# the two disagree.
 
 content_id: gamemann/mg-deathrun
 version: 0.0.0
