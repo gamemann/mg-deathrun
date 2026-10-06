@@ -346,7 +346,8 @@ func _test_a_carry_is_predicted() -> void:
 	var _pressed := _server_game.press(3, _stand_in.player_id)
 	var lowest := before
 
-	for _i in range(16):
+	# The tell, then the fall: trap_tell_seconds of nothing, then the block goes.
+	for _i in range(16 + int(_server_game.config.trap_tell_seconds * float(_server_game.tick_rate))):
 		await _step()
 		lowest = minf(lowest, mine.controller.state.position.y)
 

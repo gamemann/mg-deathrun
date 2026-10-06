@@ -30,7 +30,7 @@ game/
   dr_vote.gd         the players' vote for the next course, over dot-vote
   net/               the codec (STAGE, TEAM, TRAP, FINISHED…), the link, the player behaviour, the bridge
 courses/             link to ../mg-deathrun-maps/courses (generated there); README.md is the format
-examples/            headless_run (86), headless_courses (every course played), headless_net (39), dedicated (34)
+examples/            headless_run (92), headless_courses (every course played), headless_net (39), dedicated (34)
 tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes
 ```
 
@@ -85,7 +85,7 @@ A trapdoor kills nobody; the spikes under it do. So `_watch_course` remembers th
 godot --headless --path . --import
 find . -name '*.gd' -not -path './.godot/*' -not -path './addons/*' | while read f; do
     godot --headless --path . --check-only --script "res://${f#./}"; done
-godot --headless --path . res://examples/headless_run.tscn       # 21 sections, 86 checks
+godot --headless --path . res://examples/headless_run.tscn       # 22 sections, 92 checks
 godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
 godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 39 checks
 godot --headless --path . res://examples/dedicated.tscn          # 8 sections, 34 checks, and the exit probe
@@ -116,12 +116,15 @@ From the brief. **A player chooses a side** in chat (`!activator`, `!runner`, `!
 
 The brief asked for map voting. **A round here is a course**, so dot-vote's ROUND_END trigger — open at a round's end, apply at the next one's — is one course late. `DrVote` uses MANUAL instead: a ballot opens `dr_vote_after` (20) seconds into every course and is applied at the round's end (`apply: END_OF_ROUND`), when `DrGame.next_course_id` is set and the next `_lay_out_course` uses it once. A rocked vote also waits for the round's end (`rtv_apply`), because changing the floor mid-round kills everybody on it. No time limit (`duration_sec` 0), the current course is on the ballot, and the cooldown is off: a server with two courses would otherwise offer nothing. Stand-ins are not voters, so a server of stand-ins never opens one. dot-vote's whole command set comes with it (`!vote`, `!rtv`, `!nominate`, `setnextmap`…), and the client shell draws the ballot from the `map_ballot` notice. An owner reshapes any of it in `user://cfg/deathrun_vote.json` or `game.yml`'s `metadata: course_vote:`, keyed as `DotVoteRules`; `{"enabled": false}` leaves the rotation alone. `dedicated`'s *the course vote* (7 checks) casts one vote and lays the course it chose. Its first version awaited a frame between the round's end and the check, and a stand-in round that started in that frame laid the voted course itself: the check is synchronous now. Not yet tried in a browser.
 
+## The tell (2026-10-06)
+
+A trap waits `trap_tell_seconds` (0.35) after its button before it moves, and its parts flash red through it, so reading the activator is a skill. **Written into the document**, not into either end: `DrGame.with_tell` adds it to every trap's `delay` (and records it as `timing.tell`) before the server builds the course and sends it, so a client predicts the trap at exactly the server's tick. Only in `_lay_out_course`, where the catalogue's documents are pristine, so a rebuild never adds it twice. The flash is a `material_overlay` per part instance (`DrCourse._draw_tell`), drawn only: a trapdoor that shook would carry whoever stood on it. 0 restores the instant trap. `headless_run` checks the trap tells and nobody moves, then they fall; `headless_net` waits the tell out before it expects the client's player to go down. Rendered: `tools/shot.sh --view=trap --trap=ice_jaws --after=0.05`.
+
 ## Still to do
 
 In the order they are worth doing.
 
 1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. Then a `content/deathrun/` and a `deathrun_client` suite in dot-server-deploy, the way `wipeout_client` checks a delivered wipeout — the one suite that runs a game from a mounted pack.
-2. **A tell before a trap goes.** Every trap here fires on the tick it is pressed (the floor spikes wait 0.15 s). A `delay` with a shake or a glow on the parts during it would make reading the activator a skill.
-3. **Bunny-hop sections.** `auto_bunny_hop` and the air control are there; no course yet has a stretch built for them.
-4. **A world model in a watcher's hands**, as mg-smash-copter's list says.
-5. **Sounds for the machinery**: a trapdoor's bang, a saw's whine, the crusher's thud — today every trap is one synthesised impact.
+2. **Bunny-hop sections.** `auto_bunny_hop` and the air control are there; no course yet has a stretch built for them.
+3. **A world model in a watcher's hands**, as mg-smash-copter's list says.
+4. **Sounds for the machinery**: a trapdoor's bang, a saw's whine, the crusher's thud — today every trap is one synthesised impact.

@@ -339,6 +339,9 @@ static func _trap(source: Variant, index: int) -> DotResult:
 		"cooldown": maxf(float(trap.get("cooldown", 0.0)), 0.0),
 		"timing": {
 			"delay": maxf(float(timing.get("delay", 0.0)), 0.0),
+			# The share of the delay that is the server's tell (DrGame.with_tell), kept so a
+			# client knows how long to flash the parts for.
+			"tell": maxf(float(timing.get("tell", 0.0)), 0.0),
 			"out": maxf(float(timing.get("out", 0.3)), 0.0),
 			# Negative stays out for the rest of the round: a floor that falls and does not
 			# come back.

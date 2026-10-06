@@ -21,7 +21,7 @@ const DrProgress := preload("../game/dr_progress.gd")
 
 const SECTIONS := 22
 
-const CHECKS := 91
+const CHECKS := 92
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -463,8 +463,11 @@ func _test_the_carry() -> void:
 	# Not "are they still alive": the one runner caught ends the round, and the next round has
 	# already stood them back up at the start.
 	await _press(game, activator, 3)
-	await _step(game, int(0.15 * TICK_RATE))
-	_check(rider.controller.state.position.y < before.y - 0.8, "pressed, they go down with it",
+	# The tell first: a trap waits trap_tell_seconds after its button before it moves.
+	_check(game.stage.is_telling(3, float(game.current_tick()) / float(TICK_RATE)) and rider.controller.state.position.y > before.y - 0.1,
+		"pressed, the trap tells first, and nobody moves")
+	await _step(game, int((0.15 + game.config.trap_tell_seconds) * TICK_RATE))
+	_check(rider.controller.state.position.y < before.y - 0.8, "then they go down with it",
 		str(rider.controller.state.position))
 	await _step(game, TICK_RATE)
 	_check(_died(deaths, rider.player_id, activator.player_id), "into the pit, the activator's kill",

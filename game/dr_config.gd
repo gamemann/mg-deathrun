@@ -147,6 +147,11 @@ extends DotConfig
 ## Which courses this server may play, by id. Empty means every one it has.
 @export var course_ids: PackedStringArray = PackedStringArray()
 
+## Seconds between a button being pressed and its trap moving, added to every trap's own delay:
+## the tell. The trap's parts flash red for it, so a runner who is watching can read the
+## activator and jump. 0 fires on the press, as it did before 2026-10-06.
+@export_range(0.0, 3.0, 0.05) var trap_tell_seconds: float = 0.35
+
 ## Whether the next course is drawn at random (seeded) rather than taken in order.
 @export var shuffle_courses: bool = true
 

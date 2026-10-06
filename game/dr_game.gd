@@ -904,9 +904,26 @@ func _lay_out_course() -> void:
 			StringName(str(course_doc.get("id", "")))
 		)
 
-	build_stage(doc)
+	build_stage(with_tell(doc, config.trap_tell_seconds))
 	_place_everybody()
 	_course_unplayed = true
+
+
+## [param doc] with [param tell] seconds added to every trap's delay: the tell, written into the
+## document itself so the course a client is sent and the course the server runs move every
+## trap at the same tick. A copy: the catalogue's documents stay as their files say.
+static func with_tell(doc: Dictionary, tell: float) -> Dictionary:
+	if tell <= 0.0:
+		return doc
+
+	var out: Dictionary = doc.duplicate(true)
+
+	for trap: Dictionary in out.get("traps", []):
+		var timing: Dictionary = trap.get("timing", {})
+		timing["delay"] = float(timing.get("delay", 0.0)) + tell
+		timing["tell"] = tell
+
+	return out
 
 
 ## Builds [param doc] as the stage. What the server does at a round start, and what a client

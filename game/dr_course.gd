@@ -1010,12 +1010,63 @@ func pose_at_time(seconds: float) -> void:
 			if bool(part["switched"]):
 				node.visible = e >= 0.5
 
+		_draw_tell(index, seconds)
+
 		var cap := (trap["button"] as Node3D).get_node_or_null(^"Cap") as MeshInstance3D
 
 		if cap != null:
 			cap.material_override = _button_material(
 				trap_ready(index, int(roundf(seconds * float(maxi(tick_rate, 1)))))
 			)
+
+
+static var _tell_overlay: StandardMaterial3D = null
+
+
+## The tell: from the press until the parts move, every part of the trap flashes red, as an
+## overlay on whatever it is drawn in. Drawing only, never the parts' poses: a trapdoor that
+## shook would carry whoever stood on it, and a runner reading the tell must not be moved by it.
+func _draw_tell(index: int, seconds: float) -> void:
+	var trap: Dictionary = traps[index]
+	var timing: Dictionary = (trap["spec"] as Dictionary)["timing"]
+	var tell := float(timing.get("tell", 0.0))
+
+	if tell <= 0.0:
+		return
+
+	var since := _since(index, seconds)
+	var telling := since >= 0.0 and since < float(timing["delay"])
+
+	if _tell_overlay == null:
+		_tell_overlay = StandardMaterial3D.new()
+		_tell_overlay.albedo_color = Color(1.0, 0.1, 0.05, 0.55)
+		_tell_overlay.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_tell_overlay.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	# Flashing, not steady: on for a tenth, off for a tenth.
+	var lit := telling and int(since * 10.0) % 2 == 0
+
+	if not trap.has("meshes"):
+		var found: Array = []
+
+		for part: Dictionary in trap["parts"]:
+			if is_instance_valid(part["node"]):
+				found.append_array((part["node"] as Node).find_children("*", "GeometryInstance3D", true, false))
+				if part["node"] is GeometryInstance3D:
+					found.append(part["node"])
+
+		trap["meshes"] = found
+
+	for mesh: Variant in trap["meshes"]:
+		if is_instance_valid(mesh):
+			(mesh as GeometryInstance3D).material_overlay = _tell_overlay if lit else null
+
+
+## Whether trap [param index] is in its tell at [param seconds]: pressed, not yet moving.
+func is_telling(index: int, seconds: float) -> bool:
+	var timing: Dictionary = (traps[index]["spec"] as Dictionary)["timing"]
+	var since := _since(index, seconds)
+	return float(timing.get("tell", 0.0)) > 0.0 and since >= 0.0 and since < float(timing["delay"])
 
 
 ## Where an always-moving carrier is at [param t], as a world transform.
