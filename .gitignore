@@ -36,6 +36,10 @@
 /addons/dot_platform
 /addons/zee_weapons
 
+# The courses are mg-deathrun-maps, a repository and a pack of their own.
+# bootstrap-link: mg-deathrun-maps/courses
+/courses
+
 # Exports
 build/
 export_presets.cfg

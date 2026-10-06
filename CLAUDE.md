@@ -2,7 +2,7 @@
 
 One long course of traps. Most players run it; one or more, drawn fresh each round, stand in a corridor beside it with a button for every trap. Whoever reaches the end is handed a weapon, and the first one there calls the activators down to settle it.
 
-Read the family-wide conventions in [`../../CLAUDE.md`](../../CLAUDE.md) first, and each addon's own `CLAUDE.md` before working in it. This file is only about what this game decides. The courses are in `courses/`, written by `tools/build_courses.py`; `courses/README.md` is the format.
+Read the family-wide conventions in [`../../CLAUDE.md`](../../CLAUDE.md) first, and each addon's own `CLAUDE.md` before working in it. This file is only about what this game decides. The courses are in `courses/`, a link to [mg-deathrun-maps](../mg-deathrun-maps), written by its `tools/build_courses.py`; `courses/README.md` is the format.
 
 **Built 2026-10-05, in one session, from mg-wipeout's skeleton** (module, services, wire, client, HUD, spectate, progress, avatars, figure, beacon, textures — renamed `wo` → `dr` and then rewritten wherever they named a checkpoint, a knock or the final death). Where a comment says "mg-wipeout found…" or "mg-smash-copter found…", the finding is that game's and the line was kept because it is still true here.
 
@@ -28,9 +28,9 @@ game/
   dr_module.gd       the DotGameModule: cvars, dr_status / dr_courses / dr_traps / dr_reload, stand-ins
   dr_services.gd     chat, voice (team by default) and moderation over dot-game's base
   net/               the codec (STAGE, TEAM, TRAP, FINISHED…), the link, the player behaviour, the bridge
-courses/             the courses, generated (tools/build_courses.py); README.md is the format
+courses/             link to ../mg-deathrun-maps/courses (generated there); README.md is the format
 examples/            headless_run (86), headless_courses (every course played), headless_net (39), dedicated (27)
-tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes; build_courses.py
+tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes
 ```
 
 ## Decision 1: a trap is a pure function of the tick and the tick it was pressed on
@@ -47,7 +47,7 @@ mg-wipeout's obstacles are functions of the tick alone, so nothing about them is
 
 A course is a JSON document the server reads and sends, normalised, in `STAGE` — mg-wipeout's Decision 2. **One document is the whole map**: the runners' corridor, the activators' walkway beside it with a button opposite every trap, the finish, and the end arena. A course with the arena in another file would be two documents that have to agree about where one stops.
 
-**The courses are generated, because the two corridors have to agree along their whole length.** `tools/build_courses.py` lays a section — its floor, its trap, its button, its route points — at a cursor and moves the cursor on, then lays the walls and the walkway the length of what was built. It refuses two buttons closer than 2.6 m (the nearer would be pressed for the further), and `--check` fails if a file on disk is not what it would write. `headless_courses` plays every course: a stand-in runs it to the end, **every trap is sprung on somebody standing at its `victim` spot** (who must survive until the press and not after), an activator walks to every button, and both ends of the arena are stood in. Armed: a trap that cannot reach its victim fails it. A trapdoor whose leaves swing up instead of down does NOT fail it, and that is correct — the floor is open either way.
+**The courses are generated (in mg-deathrun-maps), because the two corridors have to agree along their whole length.** `tools/build_courses.py` lays a section — its floor, its trap, its button, its route points — at a cursor and moves the cursor on, then lays the walls and the walkway the length of what was built. It refuses two buttons closer than 2.6 m (the nearer would be pressed for the further), and `--check` fails if a file on disk is not what it would write. `headless_courses` plays every course: a stand-in runs it to the end, **every trap is sprung on somebody standing at its `victim` spot** (who must survive until the press and not after), an activator walks to every button, and both ends of the arena are stood in. Armed: a trap that cannot reach its victim fails it. A trapdoor whose leaves swing up instead of down does NOT fail it, and that is correct — the floor is open either way.
 
 **The activator must be able to SEE the corridor.** The first render put the runners' right wall 0.8 m above the walkway and hid the near half of the corridor from the only person whose job is watching it. The wall stops level with the walkway now; a thin rail and an invisible clip (`"visible": false`, a piece kind of its own) keep the activator out. `tools/shot.sh --view=activator` is the check.
 
@@ -88,7 +88,7 @@ godot --headless --path . res://examples/headless_run.tscn       # 21 sections, 
 godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
 godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 39 checks
 godot --headless --path . res://examples/dedicated.tscn          # 7 sections, 27 checks, and the exit probe
-tools/build_courses.py --check                                   # the courses are what the builder writes
+../mg-deathrun-maps/tools/build_courses.py --check               # the courses are what the builder writes
 godot --headless --path . res://tools/trace_run.tscn -- --course=dr_ice_works --every=0.25
 tools/shot.sh --view=activator
 tools/shot.sh --view=trap --trap=ice_jaws --after=0.25 --dr-course-ids=dr_ice_works
@@ -105,7 +105,7 @@ tools/shot.sh --view=trap --trap=ice_jaws --after=0.25 --dr-course-ids=dr_ice_wo
 
 ## Delivery
 
-The game's pack contains `courses/` (a real directory here, not mg-wipeout's link), so a delivered server plays every course with nothing else installed. mg-wipeout's `_add_delivered_courses` is kept in the module, so splitting the courses into their own `server_dependencies` pack later is a `game.yml` line and no code.
+The courses are their own repository and pack, [mg-deathrun-maps](../mg-deathrun-maps), split out on 2026-10-06 the way mg-wipeout's were: `courses/` here is a dot-bootstrap link (`.gitignore` names it), `game.yml` names `gamemann/mg-deathrun-maps` under `server_dependencies`, and `DrModule._add_delivered_courses` adds that mount's `courses/` to the catalogue. It is never in a client's content sync. A new course reaches servers by a release there and nothing else.
 
 ## Choosing a side, unseen activators, points and the Tab board (2026-10-06)
 

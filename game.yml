@@ -25,9 +25,11 @@ scene: scenes/dr_server.tscn
 client_scene: game/dr.tscn
 module: game/dr_module.gd
 
-# The courses travel inside this game's own pack (`courses/`), and a server sends the one it
-# is playing to each client as a document. A separate maps pack named under
-# `server_dependencies:` is read the same way if one is ever split out; see CLAUDE.md.
+# The courses are their own pack, mounted on the server alone: a server sends the one it is
+# playing to each client as a document, so a client never needs a course file. A new course
+# is a release of mg-deathrun-maps and nothing else. See CLAUDE.md.
+server_dependencies:
+  - gamemann/mg-deathrun-maps
 
 cvars:
   dr_round_seconds: "300"
