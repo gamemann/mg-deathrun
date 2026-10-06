@@ -1,0 +1,1260 @@
+extends Node3D
+
+const DrCourseDoc := preload("dr_course_doc.gd")
+const DrTextures := preload("dr_textures.gd")
+
+## A course built from its document: the pieces, the traps and their buttons, where every
+## moving thing is on a given tick, and the questions a round asks of them.
+##
+## [b]A trap is a pure function of the tick and the tick it was pressed on.[/b] mg-wipeout's
+## obstacles are functions of the tick alone, so nothing about them is ever sent. A trap here
+## has one more input — when the activator pressed its button — and that input is the ONLY
+## thing about it that travels: one event, a trap and a tick. From those two numbers both ends
+## work out where every part is on every tick that follows, so a runner's client predicting a
+## jump over an opening trapdoor sweeps it against the same trapdoor the server does, and a
+## client that hears about a press late re-poses the past correctly the next time its
+## prediction is corrected, because the tick the press happened on is part of the message.
+##
+## [b]Three kinds of thing, by what they do to a player:[/b]
+##
+## - [b]still[/b] (box, ramp, ball, cylinder): a static collider;
+## - [b]carriers[/b] (mover, turntable, and every SOLID trap part that moves — a trapdoor, a
+##   bridge that rolls over): solid, and whoever stands on one is moved with it by [method
+##   carry], the exact displacement between two poses, as in mg-wipeout;
+## - [b]killers[/b] (the `kill` pieces, and every LETHAL trap part): NOT solid. They are
+##   measured ([method lethal_at]) against the player's capsule every tick. A spike wall that
+##   was solid would push somebody out of itself before the test found them inside it, and
+##   which way a body is pushed depends on the order two bodies were resolved in.
+##
+## [b]Moving bodies are STATIC bodies, teleported — never `AnimatableBody3D`.[/b] mg-wipeout's
+## finding, unchanged: the physics server applies a kinematic body's new transform at its next
+## step, so a client replaying six predicted ticks in one frame swept all six against a
+## trapdoor a frame old. A static body's transform, written through `PhysicsServer3D` as well
+## as the node ([method _place]), is applied at once.
+
+const CHANNEL := "dr.course"
+
+## The capsule a player is measured as, in metres. Matches [DrPlayer]'s tunables.
+const PLAYER_RADIUS := 0.35
+const PLAYER_HEIGHT := 1.8
+const PLAYER_CROUCHED := 0.9
+
+## How far below a start gate goes when it opens.
+const GATE_DROP := 80.0
+
+## What [method lethal_at] answers for the always-on killers: a pit, a pool, a drop.
+const KILLED_BY_COURSE := -2
+
+## And for nothing.
+const KILLED_BY_NOTHING := -1
+
+## The height of a button's top, above the floor its `at` names.
+const BUTTON_HEIGHT := 1.05
+
+## Emitted when the course has been built and posed once.
+signal built()
+
+## Whether to draw the sky, the sun and the void. A client sets this; a server need not.
+@export var draw_world: bool = false
+
+## The collision layout everything is put on. Set by [DrGame] before [method build].
+var physics: DotPhysicsLayout = null
+
+## The normalised document this was built from. See [DrCourseDoc].
+var doc: Dictionary = {}
+
+## Ticks a second, for turning a tick into the time every formula is written in.
+var tick_rate: int = 64
+
+## Whether the start gate stands. [DrGame] closes it for the countdown.
+var gate_closed: bool = false:
+	set(value):
+		gate_closed = value
+		_place_gate()
+
+## One per still or always-moving piece, in document order.
+var pieces: Array[Dictionary] = []
+
+## One per trap, in document order: `{spec, node, parts: [{spec, node, moving, carrier}], button}`.
+var traps: Array[Dictionary] = []
+
+## trap index -> the tick its button was last pressed on, or -1. THE state of a course; see
+## the class note.
+var fired: PackedInt32Array = PackedInt32Array()
+
+## Collider instance id -> `[piece index, -1]` or `[trap index, part index]` with a flag in
+## the third slot saying which. For the carry.
+var _by_collider: Dictionary = {}
+
+## The tick the moving pieces were last posed at, so a second call for the same tick is free.
+var _posed_tick: int = -2147483648
+var _posed_time: float = -1.0
+
+var _gate: StaticBody3D = null
+var _gate_rest: Transform3D = Transform3D.IDENTITY
+
+## The two colours a button's cap can be, shared by every button.
+static var _ready_material: StandardMaterial3D = null
+static var _spent_material: StandardMaterial3D = null
+
+
+# --- Building ---------------------------------------------------------------
+
+## Builds everything [param p_doc] describes, replacing whatever was here.
+##
+## [b]The old pieces are taken out of the tree now and freed at the end of the frame.[/b]
+## A round can change course inside the netcode's own tick, and freeing a body there frees
+## something [DotNetManager.server_tick] may still be walking.
+func build(p_doc: Dictionary) -> DotResult:
+	clear()
+
+	var checked := DrCourseDoc.validate(p_doc)
+
+	if not checked.ok:
+		return checked
+
+	doc = checked.value
+
+	for index in range((doc["pieces"] as Array).size()):
+		_make_piece(index, doc["pieces"][index])
+
+	for index in range((doc["traps"] as Array).size()):
+		_make_trap(index, doc["traps"][index])
+
+	fired.resize(traps.size())
+	fired.fill(-1)
+
+	_build_gate()
+	_build_markers()
+
+	if draw_world:
+		_build_world()
+
+	pose_at_time(0.0)
+	built.emit()
+
+	DotLog.debug(CHANNEL, "built", {
+		"id": id(), "pieces": pieces.size(), "traps": traps.size(),
+		"digest": DrCourseDoc.digest(doc),
+	})
+	return DotResult.success(self)
+
+
+func clear() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+
+	pieces.clear()
+	traps.clear()
+	fired = PackedInt32Array()
+	_by_collider.clear()
+	doc = {}
+	_gate = null
+	_posed_tick = -2147483648
+	_posed_time = -1.0
+
+
+func id() -> StringName:
+	return StringName(str(doc.get("id", "")))
+
+
+func _make_piece(index: int, spec: Dictionary) -> void:
+	var kind := str(spec["kind"])
+	var role := _role(str(spec.get("role", "deck")))
+	var piece := {"index": index, "kind": kind, "spec": spec, "node": null, "moving": false}
+
+	match kind:
+		"box":
+			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], 0.0, role, spec)
+		"ramp":
+			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], float(spec["pitch"]), role, spec)
+		"ball":
+			piece["node"] = _static_round(spec, role, true)
+		"cylinder":
+			piece["node"] = _static_round(spec, role, false)
+		"mover":
+			piece["node"] = _moving_box(spec["size"], role)
+			piece["moving"] = true
+		"turntable":
+			piece["node"] = _moving_disc(float(spec["radius"]), float(spec.get("thickness", 0.6)), role)
+			piece["moving"] = true
+		"kill":
+			piece["node"] = _killer(spec)
+
+	var node: Node3D = piece["node"]
+
+	if node == null:
+		return
+
+	node.name = "%s_%d" % [kind, index]
+	add_child(node)
+
+	if not bool(spec.get("visible", true)):
+		for child in node.get_children():
+			if child is MeshInstance3D:
+				(child as MeshInstance3D).visible = false
+
+	var bodies: Array = []
+	_collect_bodies(node, bodies)
+
+	for body: CollisionObject3D in bodies:
+		_by_collider[body.get_instance_id()] = [index, -1]
+		_put_on_world_layer(body)
+
+	pieces.append(piece)
+
+
+func _collect_bodies(node: Node, into: Array) -> void:
+	if node is CollisionObject3D:
+		into.append(node)
+
+	for child in node.get_children():
+		_collect_bodies(child, into)
+
+
+func _put_on_world_layer(body: CollisionObject3D) -> void:
+	if physics == null:
+		return
+
+	var applied := physics.apply_to(body, &"world")
+
+	if not applied.ok:
+		DotLog.warn(CHANNEL, "a piece could not be put on its collision layer", {
+			"why": applied.error.message,
+		})
+
+
+static func _role(name: String) -> DrTextures.Role:
+	match name:
+		"pillar":
+			return DrTextures.Role.PILLAR
+		"cannon":
+			return DrTextures.Role.CANNON
+		"arena":
+			return DrTextures.Role.ARENA
+		"hazard":
+			return DrTextures.Role.HAZARD
+		"safe":
+			return DrTextures.Role.SAFE
+		_:
+			return DrTextures.Role.DECK
+
+
+static func _yaw_basis(yaw_degrees: float) -> Basis:
+	return Basis(Vector3.UP, deg_to_rad(yaw_degrees))
+
+
+## The colour the theme gives a role: its deck colour for the ground, white for the rest.
+func _theme_tint(role: DrTextures.Role) -> Color:
+	if role == DrTextures.Role.DECK:
+		return (doc.get("theme", {}) as Dictionary).get("deck", Color.WHITE)
+
+	return Color.WHITE
+
+
+## A surface's material: its role's, tinted if the document says so (a piece's own `tint`, or
+## the theme's deck colour for the ground everything is built of).
+func _material(role: DrTextures.Role, moving: bool, spec: Dictionary = {}) -> StandardMaterial3D:
+	var tint: Color = spec.get("tint", Color.WHITE)
+
+	if tint == Color.WHITE and role == DrTextures.Role.DECK:
+		tint = (doc.get("theme", {}) as Dictionary).get("deck", Color.WHITE)
+
+	return DrTextures.tinted(role, tint, moving)
+
+
+func _static_box(at: Vector3, size: Vector3, yaw: float, pitch: float, role: DrTextures.Role,
+		spec: Dictionary = {}) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	# Pitch about the piece's own X axis, positive raising its far (-Z) end: a ramp a mapper
+	# writes as "pitch 15" climbs away from the start the way the course runs.
+	body.transform = Transform3D(_yaw_basis(yaw) * Basis(Vector3.RIGHT, deg_to_rad(pitch)), at)
+	_add_box(body, size, _material(role, false, spec), true)
+	return body
+
+
+func _static_round(spec: Dictionary, role: DrTextures.Role, sphere: bool) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
+
+	var mesh := MeshInstance3D.new()
+	var shape := CollisionShape3D.new()
+
+	if sphere:
+		var sphere_mesh := SphereMesh.new()
+		sphere_mesh.radius = float(spec["radius"])
+		sphere_mesh.height = float(spec["radius"]) * 2.0
+		mesh.mesh = sphere_mesh
+
+		var sphere_shape := SphereShape3D.new()
+		sphere_shape.radius = float(spec["radius"])
+		shape.shape = sphere_shape
+	else:
+		var cylinder := CylinderMesh.new()
+		cylinder.top_radius = float(spec["radius"])
+		cylinder.bottom_radius = float(spec["radius"])
+		cylinder.height = float(spec["height"])
+		mesh.mesh = cylinder
+
+		var cylinder_shape := CylinderShape3D.new()
+		cylinder_shape.radius = float(spec["radius"])
+		cylinder_shape.height = float(spec["height"])
+		shape.shape = cylinder_shape
+
+	mesh.material_override = _material(role, false, spec)
+	body.add_child(mesh)
+	body.add_child(shape)
+	return body
+
+
+static func _add_box(parent: Node3D, size: Vector3, material: Material, solid: bool,
+		offset: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	mesh.position = offset
+	mesh.material_override = material
+	parent.add_child(mesh)
+
+	if solid:
+		var shape := CollisionShape3D.new()
+		var box_shape := BoxShape3D.new()
+		box_shape.size = size
+		shape.shape = box_shape
+		shape.position = offset
+		parent.add_child(shape)
+
+	return mesh
+
+
+## Puts [param body] at [param at] in the node AND in the physics server, now. See the class
+## note: the node alone reaches the physics server a frame late.
+static func _place(body: Node3D, at: Transform3D) -> void:
+	body.transform = at
+
+	if body is CollisionObject3D and body.is_inside_tree():
+		PhysicsServer3D.body_set_state(
+			(body as CollisionObject3D).get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM,
+			body.global_transform
+		)
+
+
+func _moving_box(size: Vector3, role: DrTextures.Role) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	_add_box(body, size, DrTextures.surface(role, true), true)
+	return body
+
+
+func _moving_disc(radius: float, thickness: float, role: DrTextures.Role) -> StaticBody3D:
+	var body := StaticBody3D.new()
+
+	var mesh := MeshInstance3D.new()
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = radius
+	cylinder.bottom_radius = radius
+	cylinder.height = thickness
+	cylinder.radial_segments = 48
+	mesh.mesh = cylinder
+	mesh.material_override = DrTextures.surface(role, true)
+	body.add_child(mesh)
+
+	# A bar across the top: a disc of one colour turning reads as still from most angles.
+	var bar := MeshInstance3D.new()
+	var bar_box := BoxMesh.new()
+	bar_box.size = Vector3(radius * 1.9, 0.04, 0.5)
+	bar.mesh = bar_box
+	bar.position = Vector3(0.0, thickness * 0.5 + 0.02, 0.0)
+	bar.material_override = DrTextures.surface(DrTextures.Role.PILLAR, true)
+	body.add_child(bar)
+
+	var shape := CollisionShape3D.new()
+	var cylinder_shape := CylinderShape3D.new()
+	cylinder_shape.radius = radius
+	cylinder_shape.height = thickness
+	shape.shape = cylinder_shape
+	body.add_child(shape)
+	return body
+
+
+## A volume that kills: drawn as what it is, never solid.
+func _killer(spec: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
+	_draw_look(root, spec["size"], str(spec.get("look", "spikes")), "up",
+		spec.get("tint", Color.WHITE), false)
+	return root
+
+
+## Draws one box-shaped thing as what it looks like. Meshes only; what it does is decided by
+## the box, never by the drawing.
+func _draw_look(parent: Node3D, size: Vector3, look: String, face: String, tint: Color,
+		moving: bool, role: DrTextures.Role = DrTextures.Role.HAZARD) -> void:
+	match look:
+		"none":
+			pass
+		"spikes":
+			_draw_spikes(parent, size, face, tint, moving)
+		"blade":
+			var disc := MeshInstance3D.new()
+			disc.name = "Blade"
+			var cylinder := CylinderMesh.new()
+			cylinder.top_radius = maxf(size.x, size.z) * 0.5
+			cylinder.bottom_radius = cylinder.top_radius
+			cylinder.height = size.y
+			cylinder.radial_segments = 40
+			disc.mesh = cylinder
+			disc.material_override = _metal(tint)
+			parent.add_child(disc)
+
+			# Teeth, so a spinning disc reads as spinning.
+			for tooth in range(8):
+				var spike := MeshInstance3D.new()
+				var box := BoxMesh.new()
+				box.size = Vector3(cylinder.top_radius * 0.35, size.y * 1.02, cylinder.top_radius * 0.12)
+				spike.mesh = box
+				var angle := TAU * float(tooth) / 8.0
+				spike.position = Vector3(cos(angle), 0.0, sin(angle)) * cylinder.top_radius
+				spike.rotation = Vector3(0.0, -angle, 0.0)
+				spike.material_override = DrTextures.surface(DrTextures.Role.HAZARD, true)
+				disc.add_child(spike)
+		"fire":
+			var flame := MeshInstance3D.new()
+			flame.name = "Flame"
+			var box := BoxMesh.new()
+			box.size = size
+			flame.mesh = box
+			flame.material_override = _glow(tint if tint != Color.WHITE else Color(1.0, 0.45, 0.08), 0.62)
+			parent.add_child(flame)
+		"liquid":
+			var pool := MeshInstance3D.new()
+			pool.name = "Liquid"
+			var box := BoxMesh.new()
+			box.size = size
+			pool.mesh = box
+			pool.material_override = _glow(tint if tint != Color.WHITE else Color(0.25, 0.55, 0.85), 0.78, 0.15)
+			parent.add_child(pool)
+		_:
+			var _box := _add_box(parent, size, DrTextures.tinted(role, tint, moving), false)
+
+
+## A bed of spikes filling [param size], pointing along [param face].
+##
+## [b]Cones on a base plate, and the cones are the whole tell.[/b] A trap part a runner must
+## not touch has to be readable as one from a jump away, and in a grey corridor the shape
+## carries that where a colour alone does not.
+func _draw_spikes(parent: Node3D, size: Vector3, face: String, tint: Color, moving: bool) -> void:
+	# Which way the points go, and the box's extent along it and across it.
+	var up := Vector3.UP
+	match face:
+		"down":
+			up = Vector3.DOWN
+		"forward":
+			up = Vector3.FORWARD
+		"back":
+			up = Vector3.BACK
+		"left":
+			up = Vector3.LEFT
+		"right":
+			up = Vector3.RIGHT
+
+	var along := absf(up.dot(size))
+	var across_a := Vector3.RIGHT if absf(up.x) < 0.5 else Vector3.FORWARD
+	var across_b := up.cross(across_a).normalized()
+	var width_a := absf(across_a.dot(size))
+	var width_b := absf(across_b.dot(size))
+
+	# The plate the points stand on: a fifth of the depth, at the back.
+	var plate_depth := along * 0.18
+	var plate := MeshInstance3D.new()
+	var plate_box := BoxMesh.new()
+	plate_box.size = (size - up.abs() * (along - plate_depth))
+	plate.mesh = plate_box
+	plate.position = -up * (along * 0.5 - plate_depth * 0.5)
+	plate.material_override = DrTextures.surface(DrTextures.Role.PILLAR, moving)
+	parent.add_child(plate)
+
+	var pitch := clampf(minf(width_a, width_b) / 2.0, 0.35, 0.6)
+	var count_a := maxi(int(width_a / pitch), 1)
+	var count_b := maxi(int(width_b / pitch), 1)
+	var radius := pitch * 0.42
+	var height := along - plate_depth
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = radius
+	cone.height = height
+	cone.radial_segments = 8
+	var material := _metal(tint)
+	# The arc from up to the face, except straight down, where the arc has no one axis.
+	var turn := Basis(Vector3.RIGHT, PI) if up.y < -0.99 else Basis(Quaternion(Vector3.UP, up))
+
+	for a in range(count_a):
+		for b in range(count_b):
+			var spike := MeshInstance3D.new()
+			spike.mesh = cone
+			spike.material_override = material
+			var offset := across_a * ((float(a) + 0.5) / float(count_a) - 0.5) * width_a \
+				+ across_b * ((float(b) + 0.5) / float(count_b) - 0.5) * width_b
+			spike.transform = Transform3D(turn, offset + up * (plate_depth * 0.5))
+			parent.add_child(spike)
+
+	# Very many points is very many draw calls; a field of fifty is past where they read as
+	# separate points anyway.
+	if count_a * count_b > 400:
+		DotLog.debug(CHANNEL, "a large bed of spikes", {"points": count_a * count_b})
+
+
+static func _metal(tint: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.78, 0.80, 0.84) * (tint if tint != Color.WHITE else Color(1, 1, 1))
+	material.metallic = 0.7
+	material.roughness = 0.35
+	return material
+
+
+## Something drawn as light rather than surface: fire, a pool.
+##
+## [b]Translucent ON PURPOSE, and it is the only material here that is.[/b] Writing alpha
+## puts a surface in the transparent pass, where it is sorted per surface rather than per
+## pixel (docs/gdscript-hazards.md). For a pool and a sheet of fire that is the look; for a
+## floor it would be a floor drawn through itself.
+static func _glow(colour: Color, alpha: float, emission: float = 0.9) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(colour.r, colour.g, colour.b, alpha)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.emission_enabled = emission > 0.0
+	material.emission = colour
+	material.emission_energy_multiplier = emission
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return material
+
+
+# --- Traps ------------------------------------------------------------------
+
+func _make_trap(index: int, spec: Dictionary) -> void:
+	var root := Node3D.new()
+	root.name = "Trap_%s" % str(spec["id"])
+	add_child(root)
+
+	var parts: Array = []
+
+	for part_index in range((spec["parts"] as Array).size()):
+		var part_spec: Dictionary = spec["parts"][part_index]
+		var moving := (part_spec["move"] as Vector3) != Vector3.ZERO or part_spec.has("turn") \
+			or not is_zero_approx(float(part_spec["spin"]))
+		var role := _role(str(part_spec["role"]))
+		var node: Node3D
+
+		if bool(part_spec["solid"]):
+			var body := StaticBody3D.new()
+			var shape := CollisionShape3D.new()
+			var box := BoxShape3D.new()
+			box.size = part_spec["size"]
+			shape.shape = box
+			body.add_child(shape)
+			node = body
+		else:
+			node = Node3D.new()
+
+		node.name = "Part_%d" % part_index
+		node.transform = _part_rest(part_spec)
+		_draw_look(node, part_spec["size"], str(part_spec["look"]), str(part_spec["face"]),
+			part_spec.get("tint", _theme_tint(role)), moving, role)
+		root.add_child(node)
+
+		if node is CollisionObject3D:
+			_by_collider[node.get_instance_id()] = [index, part_index, true]
+			_put_on_world_layer(node as CollisionObject3D)
+
+		parts.append({
+			"spec": part_spec,
+			"node": node,
+			"moving": moving,
+			# A lethal part that does not move is a hazard that is OFF until the trap runs —
+			# fire, a laser — and ON while it is out. One that moves is lethal wherever it is,
+			# because where it is IS whether it is out: spikes at rest are under the floor.
+			"switched": bool(part_spec["lethal"]) and not moving,
+		})
+
+	var button := _make_button(spec["button"])
+	root.add_child(button)
+
+	traps.append({"spec": spec, "node": root, "parts": parts, "button": button})
+
+
+## A post with a cap on it, where the activator presses. Not solid: it is in a corridor
+## somebody has to walk along, and a post a player catches on is a post that ends a round.
+func _make_button(spec: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.name = "Button"
+	root.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
+
+	var post := MeshInstance3D.new()
+	var post_mesh := CylinderMesh.new()
+	post_mesh.top_radius = 0.12
+	post_mesh.bottom_radius = 0.16
+	post_mesh.height = BUTTON_HEIGHT - 0.08
+	post.mesh = post_mesh
+	post.position = Vector3(0.0, post_mesh.height * 0.5, 0.0)
+	post.material_override = DrTextures.surface(DrTextures.Role.PILLAR)
+	root.add_child(post)
+
+	var cap := MeshInstance3D.new()
+	cap.name = "Cap"
+	var cap_mesh := CylinderMesh.new()
+	cap_mesh.top_radius = 0.2
+	cap_mesh.bottom_radius = 0.22
+	cap_mesh.height = 0.12
+	cap.mesh = cap_mesh
+	cap.position = Vector3(0.0, BUTTON_HEIGHT - 0.04, 0.0)
+	cap.material_override = _button_material(true)
+	root.add_child(cap)
+	return root
+
+
+static func _button_material(ready: bool) -> StandardMaterial3D:
+	if _ready_material == null:
+		_ready_material = StandardMaterial3D.new()
+		_ready_material.albedo_color = Color(0.25, 0.85, 0.35)
+		_ready_material.emission_enabled = true
+		_ready_material.emission = Color(0.2, 0.9, 0.3)
+		_ready_material.emission_energy_multiplier = 0.8
+
+		_spent_material = StandardMaterial3D.new()
+		_spent_material.albedo_color = Color(0.75, 0.18, 0.15)
+
+	return _ready_material if ready else _spent_material
+
+
+## Where a part rests: its document transform, before any trap has moved it.
+static func _part_rest(part: Dictionary) -> Transform3D:
+	var basis := _yaw_basis(float(part["yaw"])) * Basis(Vector3.RIGHT, deg_to_rad(float(part["pitch"])))
+	return Transform3D(basis, part["at"])
+
+
+## How far out a trap is, 0 at rest and 1 at full, [param seconds] after its button was
+## pressed. Negative seconds is "not pressed".
+##
+## [b]Eased at both ends, and the hold is the part a runner uses.[/b] A trapdoor that opened
+## linearly would drop somebody at the speed it was moving at the instant it started, which
+## is nothing; one that eases out reads as a door swinging.
+static func extension(timing: Dictionary, seconds: float) -> float:
+	if seconds < 0.0:
+		return 0.0
+
+	var t := seconds - float(timing["delay"])
+
+	if t <= 0.0:
+		return 0.0
+
+	var out := float(timing["out"])
+
+	if t < out:
+		return smoothstep(0.0, 1.0, t / maxf(out, 0.0001))
+
+	t -= out
+	var hold := float(timing["hold"])
+
+	if hold < 0.0 or t < hold:
+		return 1.0
+
+	t -= hold
+	var back := float(timing["back"])
+
+	if t < back:
+		return 1.0 - smoothstep(0.0, 1.0, t / maxf(back, 0.0001))
+
+	return 0.0
+
+
+## How long a trap is busy from the press, in seconds: until its parts are home again. INF for
+## one that stays out.
+static func duration(timing: Dictionary) -> float:
+	if float(timing["hold"]) < 0.0:
+		return INF
+
+	return float(timing["delay"]) + float(timing["out"]) + float(timing["hold"]) + float(timing["back"])
+
+
+## Where part [param part] is at extension [param e], [param running] seconds into the trap's
+## run. The one formula, used for drawing, colliding, carrying and killing alike.
+static func part_transform(part: Dictionary, e: float, running: float) -> Transform3D:
+	var at := _part_rest(part)
+
+	if not is_zero_approx(float(part["spin"])) and running > 0.0:
+		at.basis = at.basis * Basis(Vector3.UP, deg_to_rad(float(part["spin"]) * running))
+
+	if part.has("turn"):
+		var turn: Dictionary = part["turn"]
+		var axis := Vector3.RIGHT
+
+		match str(turn["axis"]):
+			"y":
+				axis = Vector3.UP
+			"z":
+				axis = Vector3.BACK
+
+		var pivot: Vector3 = turn["pivot"]
+		var rotation := Basis(axis, deg_to_rad(float(turn["degrees"]) * e))
+		at = Transform3D(rotation, pivot - rotation * pivot) * at
+
+	at.origin += (part["move"] as Vector3) * e
+	return at
+
+
+## Seconds since trap [param index] was pressed, at [param seconds] into the round, or -1.
+func _since(index: int, seconds: float) -> float:
+	if index < 0 or index >= fired.size() or fired[index] < 0:
+		return -1.0
+
+	return seconds - float(fired[index]) / float(maxi(tick_rate, 1))
+
+
+## The extension of trap [param index] at [param seconds].
+func trap_extension(index: int, seconds: float) -> float:
+	return extension((traps[index]["spec"] as Dictionary)["timing"], _since(index, seconds))
+
+
+## Seconds a trap's parts have been running, for a blade's spin: from the end of the delay to
+## the moment the trap is home, and frozen after that.
+func _running(index: int, seconds: float) -> float:
+	var since := _since(index, seconds)
+
+	if since < 0.0:
+		return 0.0
+
+	var timing: Dictionary = (traps[index]["spec"] as Dictionary)["timing"]
+	return clampf(since - float(timing["delay"]), 0.0, duration(timing) - float(timing["delay"]))
+
+
+## Records a press, and re-poses on the next ask. What the server does when a button is
+## pressed and what a client does when it is told one was.
+func set_fired(index: int, tick: int) -> void:
+	if index < 0 or index >= fired.size():
+		return
+
+	fired[index] = tick
+	_posed_tick = -2147483648
+
+
+## Every trap home, for the top of a round.
+func reset_traps() -> void:
+	fired.fill(-1)
+	_posed_tick = -2147483648
+
+
+## Whether trap [param index] can be pressed on [param tick].
+##
+## [b]Once a round unless the document gives it a cooldown[/b], and never while it is still
+## running: a trapdoor pressed again while it is open would restart a timeline the runners
+## are already timing their crossing against.
+func trap_ready(index: int, tick: int) -> bool:
+	if index < 0 or index >= fired.size():
+		return false
+
+	if fired[index] < 0:
+		return true
+
+	var spec: Dictionary = traps[index]["spec"]
+	var cooldown := float(spec["cooldown"])
+
+	if cooldown <= 0.0:
+		return false
+
+	var since := float(tick - fired[index]) / float(maxi(tick_rate, 1))
+	return since >= maxf(cooldown, duration(spec["timing"]))
+
+
+## Whether trap [param index] is moving or out on [param tick].
+func trap_running(index: int, tick: int) -> bool:
+	if index < 0 or index >= fired.size() or fired[index] < 0:
+		return false
+
+	var since := float(tick - fired[index]) / float(maxi(tick_rate, 1))
+	return since < duration((traps[index]["spec"] as Dictionary)["timing"])
+
+
+func trap_count() -> int:
+	return traps.size()
+
+
+func trap_name(index: int) -> String:
+	return str((traps[index]["spec"] as Dictionary)["name"]) if index >= 0 and index < traps.size() else ""
+
+
+func trap_index(trap_id: String) -> int:
+	for index in range(traps.size()):
+		if str((traps[index]["spec"] as Dictionary)["id"]) == trap_id:
+			return index
+
+	return -1
+
+
+## Where trap [param index]'s button is pressed from: the top of its post.
+func button_point(index: int) -> Vector3:
+	var button: Dictionary = (traps[index]["spec"] as Dictionary)["button"]
+	return (button["at"] as Vector3) + Vector3(0.0, BUTTON_HEIGHT, 0.0)
+
+
+## Which button somebody at [param eyes] looking along [param aim] would press: the nearest
+## within [param reach] and inside [param cone], or -1.
+##
+## [b]Whichever is nearest, ready or not.[/b] Pressing a spent button is a press that does
+## nothing and says so; skipping it for a ready one behind it would fire a trap the activator
+## was not looking at.
+func button_for(eyes: Vector3, aim: Vector3, reach: float, cone: float) -> int:
+	var best := -1
+	var best_distance := INF
+
+	for index in range(traps.size()):
+		var to := button_point(index) - eyes
+		var distance := to.length()
+
+		if distance > reach or distance >= best_distance:
+			continue
+
+		if distance > 0.3 and aim.normalized().dot(to / distance) < cone:
+			continue
+
+		best = index
+		best_distance = distance
+
+	return best
+
+
+## The box a trap reaches: where somebody has to be for it to matter. The document's `zone`,
+## or every part's box at rest and at full extension, grown by a metre (and two upward, so
+## somebody STANDING on a trapdoor is inside its zone). What a stand-in activator watches.
+func trap_zone(index: int) -> AABB:
+	var spec: Dictionary = traps[index]["spec"]
+
+	if spec.has("zone"):
+		var zone: Dictionary = spec["zone"]
+		var size: Vector3 = zone["size"]
+		return AABB((zone["at"] as Vector3) - size * 0.5, size)
+
+	var box := AABB()
+	var first := true
+
+	for part: Dictionary in spec["parts"]:
+		for e in [0.0, 0.5, 1.0]:
+			var frame := part_transform(part, e, 0.0)
+			var half := (part["size"] as Vector3) * 0.5
+
+			for corner in range(8):
+				var local := Vector3(
+					half.x if corner & 1 else -half.x,
+					half.y if corner & 2 else -half.y,
+					half.z if corner & 4 else -half.z
+				)
+				var point := frame * local
+
+				if first:
+					box = AABB(point, Vector3.ZERO)
+					first = false
+				else:
+					box = box.expand(point)
+
+	return AABB(box.position - Vector3(1.0, 1.0, 1.0), box.size + Vector3(2.0, 3.0, 2.0))
+
+
+# --- The start, the finish, the world -----------------------------------------
+
+## The gate across the front of the runners' start, which the countdown holds closed.
+func _build_gate() -> void:
+	var start: Dictionary = doc["start"]
+	var at: Vector3 = start["at"]
+	var size: Vector3 = start["size"]
+	var basis := _yaw_basis(float(start["yaw"]))
+
+	# Across the front edge, which is -Z in the area's own frame: yaw 0 faces -Z, and the
+	# course runs the way the runners are facing.
+	_gate = StaticBody3D.new()
+	_gate.name = "Gate"
+	_gate_rest = Transform3D(basis, at + basis * Vector3(0.0, size.y * 0.5, -size.z * 0.5 - 0.2))
+	_add_box(_gate, Vector3(size.x + 0.4, size.y, 0.3), DrTextures.surface(DrTextures.Role.CANNON), true)
+	add_child(_gate)
+	_put_on_world_layer(_gate)
+	_place_gate()
+
+
+func _place_gate() -> void:
+	if _gate == null:
+		return
+
+	var at := _gate_rest
+
+	if not gate_closed:
+		at.origin -= Vector3(0.0, GATE_DROP, 0.0)
+
+	_place(_gate, at)
+
+
+## An arch over the finish. Meshes only: what counts is the volume ([method in_finish]).
+func _build_markers() -> void:
+	var finish: Dictionary = doc["finish"]
+	var basis := _yaw_basis(float(finish["yaw"]))
+	var size: Vector3 = finish["size"]
+	var arch := Node3D.new()
+	arch.name = "Finish"
+	arch.transform = Transform3D(basis, finish["at"])
+	add_child(arch)
+
+	var height := maxf(size.y, 2.5)
+
+	for side in [-1.0, 1.0]:
+		var _post := _add_box(arch, Vector3(0.4, height, 0.4), DrTextures.surface(DrTextures.Role.PILLAR), false,
+			Vector3(side * size.x * 0.5, height * 0.5, 0.0))
+
+	var _beam := _add_box(arch, Vector3(size.x + 0.4, 0.6, 0.4), DrTextures.surface(DrTextures.Role.SAFE), false,
+		Vector3(0.0, height, 0.0))
+
+
+## The sky, the sun, the fog and the void. Client side.
+func _build_world() -> void:
+	var theme: Dictionary = doc.get("theme", {})
+
+	var sun := DirectionalLight3D.new()
+	sun.name = "Sun"
+	sun.rotation = Vector3(deg_to_rad(-55.0), deg_to_rad(28.0), 0.0)
+	# mg-smash-copter's number, measured under `gl_compatibility`: higher and every prototype
+	# surface comes back within a few percent of white.
+	sun.light_energy = 0.82
+	sun.light_color = theme.get("sun", Color(1.0, 0.97, 0.92))
+	sun.shadow_enabled = true
+	add_child(sun)
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+
+	var sky := Sky.new()
+	var material := ProceduralSkyMaterial.new()
+	material.sky_top_color = theme.get("sky", Color(0.48, 0.60, 0.74))
+	material.sky_horizon_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
+	material.ground_bottom_color = theme.get("void", Color(0.10, 0.12, 0.16))
+	material.ground_horizon_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
+	sky.sky_material = material
+	env.sky = sky
+
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.3
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 0.68
+	env.fog_enabled = true
+	env.fog_light_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
+	env.fog_density = float(theme.get("fog", 0.004))
+
+	var world_env := WorldEnvironment.new()
+	world_env.name = "Environment"
+	world_env.environment = env
+	add_child(world_env)
+
+	# The floor of the drop: what everybody who falls sees coming. Drawn only; the fall is a
+	# height comparison in [DrGame], because a trigger volume can be stepped over between two
+	# ticks by something falling fast enough.
+	var floor_mesh := MeshInstance3D.new()
+	floor_mesh.name = "Void"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(1600.0, 1600.0)
+	floor_mesh.mesh = plane
+	var floor_material := StandardMaterial3D.new()
+	floor_material.albedo_color = theme.get("void", Color(0.10, 0.12, 0.16))
+	floor_material.roughness = 1.0
+	floor_mesh.material_override = floor_material
+	floor_mesh.position = Vector3(0.0, kill_height() - 2.0, 0.0)
+	add_child(floor_mesh)
+
+
+# --- Where everything is ------------------------------------------------------
+
+## Poses every moving thing at [param tick]. Idempotent per tick, until a press changes it.
+func pose_at(tick: int) -> void:
+	if tick == _posed_tick:
+		return
+
+	pose_at_time(float(tick) / float(maxi(tick_rate, 1)))
+	_posed_tick = tick
+
+
+## Poses every moving thing at [param seconds]. What a client draws between two ticks.
+##
+## [b]Forgets which tick it was posed at.[/b] A frame posed between ticks N and N+1 has moved
+## every collider off tick N, so the next [method pose_at] for N must not take the shortcut.
+func pose_at_time(seconds: float) -> void:
+	_posed_time = seconds
+	_posed_tick = -2147483648
+
+	for piece in pieces:
+		if bool(piece["moving"]):
+			_place(piece["node"], transform_of(piece, seconds))
+
+	for index in range(traps.size()):
+		var trap: Dictionary = traps[index]
+		var e := trap_extension(index, seconds)
+		var running := _running(index, seconds)
+
+		for part: Dictionary in trap["parts"]:
+			var node: Node3D = part["node"]
+
+			if not is_instance_valid(node):
+				continue
+
+			if bool(part["moving"]):
+				_place(node, part_transform(part["spec"], e, running))
+
+			# A hazard that switches on is drawn only while it is on, so what a runner sees is
+			# what kills: a sheet of fire that was always drawn would be a sheet of fire they
+			# learn to walk through.
+			if bool(part["switched"]):
+				node.visible = e >= 0.5
+
+		var cap := (trap["button"] as Node3D).get_node_or_null(^"Cap") as MeshInstance3D
+
+		if cap != null:
+			cap.material_override = _button_material(
+				trap_ready(index, int(roundf(seconds * float(maxi(tick_rate, 1)))))
+			)
+
+
+## Where an always-moving carrier is at [param t], as a world transform.
+func transform_of(piece: Dictionary, t: float) -> Transform3D:
+	var spec: Dictionary = piece["spec"]
+	var yaw := _yaw_basis(float(spec.get("yaw", 0.0)))
+
+	match str(piece["kind"]):
+		"mover":
+			var from: Vector3 = spec["from"]
+			var to: Vector3 = spec["to"]
+			var cycle := t / float(spec["period"]) + float(spec.get("phase", 0.0))
+			return Transform3D(yaw, from.lerp(to, 0.5 - 0.5 * cos(TAU * cycle)))
+		"turntable":
+			var angle := deg_to_rad(float(spec.get("phase", 0.0)) + float(spec["speed"]) * t)
+			return Transform3D(yaw * Basis(Vector3.UP, angle), spec["at"])
+		_:
+			return (piece["node"] as Node3D).transform
+
+
+# --- What a player's movement asks ----------------------------------------------
+
+## How far whatever [param ground_id] is moves a point at [param at] between [param tick]
+## and the next one. Zero for anything that does not move.
+##
+## [b]The exact displacement, not a velocity times a step.[/b] mg-wipeout's: a point on a
+## turning thing moves along an arc, and a velocity taken at the start of the tick moves it
+## along the tangent, which spirals a player standing still off a turntable — or, here, off a
+## bridge that rolls over, a little early.
+func carry(ground_id: int, at: Vector3, tick: int) -> Vector3:
+	var found: Variant = _by_collider.get(ground_id)
+
+	if found == null:
+		return Vector3.ZERO
+
+	var where: Array = found
+	var dt := 1.0 / float(maxi(tick_rate, 1))
+	var t := float(tick) * dt
+
+	if where.size() > 2:
+		var trap_index := int(where[0])
+		var trap: Dictionary = traps[trap_index]
+		var part: Dictionary = trap["parts"][int(where[1])]
+
+		if not bool(part["moving"]):
+			return Vector3.ZERO
+
+		var now := part_transform(part["spec"], trap_extension(trap_index, t), _running(trap_index, t))
+		var next := part_transform(part["spec"], trap_extension(trap_index, t + dt), _running(trap_index, t + dt))
+		return (next * now.affine_inverse()) * at - at
+
+	var piece: Dictionary = pieces[int(where[0])]
+
+	if not bool(piece["moving"]):
+		return Vector3.ZERO
+
+	var before := transform_of(piece, t)
+	var after := transform_of(piece, t + dt)
+	return (after * before.affine_inverse()) * at - at
+
+
+## What kills somebody standing at [param feet] on [param tick]: a trap's index,
+## [constant KILLED_BY_COURSE] for a pit, a pool or a drop, or [constant KILLED_BY_NOTHING].
+##
+## [b]A measurement, not a contact.[/b] See the class note: nothing that kills is solid, and the
+## question is asked of the capsule's own axis against each box, the same arithmetic on both
+## ends.
+func lethal_at(feet: Vector3, crouched: bool, tick: int) -> int:
+	var t := float(tick) / float(maxi(tick_rate, 1))
+	var top := feet + Vector3(0.0, (PLAYER_CROUCHED if crouched else PLAYER_HEIGHT) - PLAYER_RADIUS, 0.0)
+	var bottom := feet + Vector3(0.0, PLAYER_RADIUS, 0.0)
+
+	for index in range(traps.size()):
+		# A trap nobody has pressed is a trap at rest, and nothing at rest kills — spikes are
+		# under the floor, fire is off. Skipped rather than measured, which is most of a tick.
+		if fired[index] < 0:
+			continue
+
+		var e := trap_extension(index, t)
+
+		if e <= 0.0:
+			continue
+
+		var running := _running(index, t)
+
+		for part: Dictionary in traps[index]["parts"]:
+			var spec: Dictionary = part["spec"]
+
+			if not bool(spec["lethal"]):
+				continue
+
+			if bool(part["switched"]) and e < 0.5:
+				continue
+
+			if _capsule_in_box(bottom, top, part_transform(spec, e, running), spec["size"]):
+				return index
+
+	for piece in pieces:
+		if str(piece["kind"]) != "kill":
+			continue
+
+		var spec: Dictionary = piece["spec"]
+
+		if _capsule_in_box(bottom, top, Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"]), spec["size"]):
+			return KILLED_BY_COURSE
+
+	return KILLED_BY_NOTHING
+
+
+## Whether a capsule from [param bottom] to [param top] (both sphere centres) touches a box.
+static func _capsule_in_box(bottom: Vector3, top: Vector3, frame: Transform3D, size: Vector3) -> bool:
+	var inverse := frame.affine_inverse()
+	var half := size * 0.5
+
+	# Five samples up the axis: a capsule's distance to a box is not a closed form worth the
+	# trouble, and at a 1.1 m axis five samples are 27 cm apart — under the capsule's own radius,
+	# so nothing thinner than a radius passes between two of them.
+	for step in range(5):
+		var local := inverse * bottom.lerp(top, float(step) / 4.0)
+		var clamped := Vector3(
+			clampf(local.x, -half.x, half.x),
+			clampf(local.y, -half.y, half.y),
+			clampf(local.z, -half.z, half.z)
+		)
+
+		if local.distance_to(clamped) <= PLAYER_RADIUS:
+			return true
+
+	return false
+
+
+# --- The course's own facts -----------------------------------------------------
+
+func kill_height() -> float:
+	return float(doc.get("kill_height", -12.0))
+
+
+## Whether somebody standing at [param feet] is across the finish.
+func in_finish(feet: Vector3) -> bool:
+	if doc.is_empty():
+		return false
+
+	var finish: Dictionary = doc["finish"]
+	return _inside(feet + Vector3(0.0, 0.9, 0.0), finish["at"], finish["size"], float(finish["yaw"]))
+
+
+## Whether [param point] is inside an area whose FLOOR-centre is [param at].
+static func _inside(point: Vector3, at: Vector3, size: Vector3, yaw: float) -> bool:
+	var local := _yaw_basis(yaw).inverse() * (point - at)
+	return absf(local.x) <= size.x * 0.5 and local.y >= -0.5 and local.y <= size.y \
+		and absf(local.z) <= size.z * 0.5
+
+
+## Where seat [param seat] of [param of] stands in an area. Returns `[position, yaw]`.
+##
+## Rows across the area from the front, a metre and a half apart, so twenty-four runners are
+## four rows of six on a nine-metre start and nobody is placed inside anybody. Full rows when
+## [param of] is large, so a joiner's seat does not move the seats of the people already there.
+static func spot_in(area: Dictionary, seat: int, of: int) -> Array:
+	var size: Vector3 = area["size"]
+	var basis := _yaw_basis(float(area["yaw"]))
+	var per_row := maxi(int((size.x - 1.0) / 1.5), 1)
+	var rows := maxi(int((size.z - 1.0) / 1.5), 1)
+	var row := (seat / per_row) % rows
+	var column := seat % per_row
+	var in_row := mini(per_row, of - (seat / per_row) * per_row)
+	var x := (float(column) - float(maxi(in_row, 1) - 1) * 0.5) * 1.5
+	# A row behind the last one comes back to the front, a little to one side: a full server
+	# in a small area is people standing close rather than people standing outside it.
+	if seat / per_row >= rows:
+		x += 0.6
+	var z := -size.z * 0.5 + 1.2 + float(row) * 1.5
+	z = minf(z, size.z * 0.5 - 0.6)
+	return [(area["at"] as Vector3) + basis * Vector3(x, 0.2, z), float(area["yaw"])]
+
+
+func start_spot(seat: int, of: int) -> Array:
+	return spot_in(doc["start"], seat, of) if not doc.is_empty() else [Vector3.ZERO, 0.0]
+
+
+func activator_spot(seat: int, of: int) -> Array:
+	return spot_in(doc["activators"], seat, of) if not doc.is_empty() else [Vector3.ZERO, 0.0]
+
+
+## Where somebody arrives in the end arena: [param runners] for a runner who crossed the line,
+## otherwise an activator who was called.
+func end_spot(runners: bool, seat: int) -> Array:
+	if doc.is_empty():
+		return [Vector3.ZERO, 0.0]
+
+	return spot_in((doc["end"] as Dictionary)["runners" if runners else "activators"], seat, 1000)
+
+
+## The route a stand-in runner follows, as the document gives it.
+func route() -> Array:
+	return doc.get("route", [])
+
+
+## Roughly where the middle of everything is, and how far it reaches. For an overview camera.
+func bounds() -> AABB:
+	var box := AABB()
+	var first := true
+
+	for piece in pieces:
+		var spec: Dictionary = piece["spec"]
+		var at: Vector3 = spec.get("at", spec.get("from", Vector3.ZERO))
+
+		if first:
+			box = AABB(at, Vector3.ZERO)
+			first = false
+		else:
+			box = box.expand(at)
+
+	return box
+
+
+func describe() -> Dictionary:
+	var used := 0
+
+	for tick in fired:
+		if tick >= 0:
+			used += 1
+
+	return {
+		"id": String(id()),
+		"name": str(doc.get("name", "-")),
+		"pieces": pieces.size(),
+		"traps": traps.size(),
+		"pressed": used,
+		"gate": "closed" if gate_closed else "open",
+		"posed": "%.2f s" % _posed_time,
+	}
+
+
+func describe_lines() -> PackedStringArray:
+	var lines := PackedStringArray(["course"])
+	var facts := describe()
+
+	for key: String in facts:
+		lines.append("  %-12s %s" % [key, facts[key]])
+
+	return lines

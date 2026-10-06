@@ -1,0 +1,860 @@
+extends Node
+
+const DrCatalogue := preload("../game/dr_catalogue.gd")
+const DrConfig := preload("../game/dr_config.gd")
+const DrCourse := preload("../game/dr_course.gd")
+const DrCourseDoc := preload("../game/dr_course_doc.gd")
+const DrGame := preload("../game/dr_game.gd")
+const DrPaths := preload("../game/dr_paths.gd")
+const DrPlayer := preload("../game/dr_player.gd")
+const DrProgress := preload("../game/dr_progress.gd")
+
+## The simulation, headless: documents, the trap timeline, the draw, the buttons, every shape
+## of trap killing somebody, the end, and how a round is decided.
+##
+## [b]Counts sections AND checks, and the second is the one that matters.[/b] A script error
+## inside a section aborts that function and the section counter is already satisfied,
+## because the section announced itself on the way in. dot-settings has the story.
+##
+## Every number about the course here is the built-in practice course's
+## ([method DrCatalogue.practice]), whose comment lists where each trap is.
+
+const SECTIONS := 21
+
+const CHECKS := 86
+
+const TICK_RATE := 64
+const TICK := 1.0 / float(TICK_RATE)
+
+var _passed := 0
+var _failed := 0
+var _sections_entered := 0
+var _sections_finished := 0
+var _failures := PackedStringArray()
+
+var _worlds: Array[DrGame] = []
+
+
+func _ready() -> void:
+	DotLog.set_level(DotLog.Level.ERROR)
+	_run.call_deferred()
+
+
+func _run() -> void:
+	print("deathrun headless run")
+	print("")
+
+	_test_config()
+	_test_documents()
+	_test_the_wire()
+	_test_catalogue()
+	_test_delivery()
+	_test_the_timeline()
+	await _test_world_builds()
+	await _test_the_draw()
+	await _test_the_gate()
+	await _test_the_buttons()
+	await _test_the_trapdoor()
+	await _test_the_killers()
+	await _test_the_carry()
+	await _test_a_bot_runs_the_course()
+	await _test_the_end()
+	await _test_the_traps_win()
+	await _test_the_runners_win()
+	await _test_the_clock()
+	await _test_a_late_joiner()
+	await _test_a_bot_at_the_buttons()
+	await _test_progress()
+
+	for world in _worlds.duplicate():
+		await _dispose(world)
+
+	await get_tree().process_frame
+
+	print("")
+	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
+	print("%d passed, %d failed" % [_passed, _failed])
+
+	for line in _failures:
+		print("  FAIL  %s" % line)
+
+	var code := 1 if _failed > 0 else 0
+
+	if _sections_entered != _sections_finished or _sections_entered != SECTIONS:
+		print("ERROR: %d of %d sections finished, %d expected." % [
+			_sections_finished, _sections_entered, SECTIONS
+		])
+		code = 1
+
+	if _passed + _failed != CHECKS:
+		print("ERROR: %d checks ran, %d expected. A section aborted part-way." % [
+			_passed + _failed, CHECKS
+		])
+		code = 1
+
+	get_tree().quit(code)
+
+
+# --- Without a world ------------------------------------------------------------
+
+func _test_config() -> void:
+	_section("the configuration")
+	var config := DrConfig.new()
+	_check(config.validate().ok, "the defaults validate")
+	_check(config.activators_for(1) == 0, "one person is not a round")
+	_check(config.activators_for(2) == 1 and config.activators_for(19) == 1,
+		"one activator up to nineteen players")
+	_check(config.activators_for(20) == 2, "two at twenty")
+	_check(config.activators_for(200) == config.max_activators, "never more than the most",
+		"%d" % config.activators_for(200))
+
+	config.timeout_winner = 5
+	_check(not config.validate().ok, "a timeout winner that is no side is refused")
+	_finished()
+
+
+func _test_documents() -> void:
+	_section("a course is a document, and a bad one is refused with a reason")
+	var practice := DrCatalogue.practice()
+	_check(str(practice.get("id", "")) == "dr_practice", "the practice course validates")
+	_check(practice["start"]["at"] is Vector3, "positions are normalised to vectors")
+	_check((practice["traps"] as Array).size() == 5, "it has its five traps")
+
+	var timing: Dictionary = (practice["traps"][0] as Dictionary)["timing"]
+	_check(timing.has("delay") and is_zero_approx(float(timing["delay"])),
+		"an omitted delay is filled in", str(timing))
+
+	var unknown := practice.duplicate(true)
+	(unknown["pieces"] as Array).append({"kind": "trampoline", "at": [0, 0, 0]})
+	var refused := DrCourseDoc.validate(unknown)
+	_check(not refused.ok and str(refused.error).contains("trampoline"),
+		"an unknown piece kind is refused, naming it", str(refused.error) if not refused.ok else "")
+
+	var no_button := practice.duplicate(true)
+	(no_button["traps"][0] as Dictionary).erase("button")
+	refused = DrCourseDoc.validate(no_button)
+	_check(not refused.ok and str(refused.error).contains("button"),
+		"a trap with no button is refused, saying so")
+
+	var no_parts := practice.duplicate(true)
+	(no_parts["traps"][1] as Dictionary)["parts"] = []
+	_check(not DrCourseDoc.validate(no_parts).ok, "a trap that moves nothing is refused")
+
+	var twice := practice.duplicate(true)
+	(twice["traps"][1] as Dictionary)["id"] = "trapdoor"
+	refused = DrCourseDoc.validate(twice)
+	_check(not refused.ok and str(refused.error).contains("trapdoor"), "two traps with one id is refused")
+
+	var ugly := practice.duplicate(true)
+	((ugly["traps"][2] as Dictionary)["parts"][0] as Dictionary)["look"] = "glitter"
+	_check(not DrCourseDoc.validate(ugly).ok, "a part that looks like nothing this build draws is refused")
+
+	var later := practice.duplicate(true)
+	later["format"] = 2
+	_check(not DrCourseDoc.validate(later).ok, "a document from a later format is refused")
+
+	var no_end := practice.duplicate(true)
+	no_end.erase("end")
+	_check(not DrCourseDoc.validate(no_end).ok, "a course with no end arena is refused")
+
+	var lethal: Dictionary = (practice["traps"][1] as Dictionary)["parts"][0]
+	_check(bool(lethal["lethal"]) and not bool(lethal["solid"]),
+		"a part that kills is not solid unless the document says so")
+	_finished()
+
+
+func _test_the_wire() -> void:
+	_section("the document travels, and arrives as the same document")
+	var practice := DrCatalogue.practice()
+	var bytes := DrCourseDoc.encode(practice)
+	var back := DrCourseDoc.decode(bytes)
+	_check(back.ok, "it decodes", back.error.message if not back.ok else "")
+	_check(back.ok and DrCourseDoc.digest(back.value) == DrCourseDoc.digest(practice),
+		"its digest is the one the server sent", "%d bytes" % bytes.size())
+	_check(bytes.size() < DrCourseDoc.WIRE_LIMIT, "it is under the wire limit")
+
+	var torn := bytes.slice(0, bytes.size() / 2)
+	_check(not DrCourseDoc.decode(torn).ok, "half of it is refused, not built")
+	_finished()
+
+
+func _test_catalogue() -> void:
+	_section("the catalogue")
+	var catalogue := DrCatalogue.new()
+	var _loaded := catalogue.load_from("courses")
+	_check(catalogue.courses.has(DrCatalogue.PRACTICE), "the built-in course is always there")
+	_check(catalogue.refused.is_empty(), "no installed document was refused",
+		", ".join(catalogue.refused.keys()))
+
+	var ids := catalogue.playable_courses(PackedStringArray())
+	_check(ids.size() == 1 or not ids.has(DrCatalogue.PRACTICE),
+		"practice drops out once there is a real course", "%d playable" % ids.size())
+
+	var stream := DotRandomStream.new(7)
+	var first := catalogue.next_course(PackedStringArray(), true, stream, &"")
+	var second := catalogue.next_course(PackedStringArray(), true, stream, StringName(str(first["id"])))
+	_check(ids.size() < 2 or str(first["id"]) != str(second["id"]),
+		"a shuffle does not repeat the course just played")
+	_finished()
+
+
+## Every bare `"res://…"` string in a shipped script that names one of this game's own
+## directories, and every `class_name`. A delivered pack cannot use either; see
+## mg-smash-copter's Decision 7.
+func _test_delivery() -> void:
+	_section("what a delivered pack cannot do, nobody here does")
+	var bare := PackedStringArray()
+	var named := PackedStringArray()
+	var own := ["game", "scenes", "assets", "textures", "courses", "audio"]
+
+	for path in _scripts("res://game"):
+		var lines := FileAccess.get_file_as_string(path).split("\n")
+
+		for index in range(lines.size()):
+			var line := lines[index].strip_edges()
+
+			if line.begins_with("#"):
+				continue
+
+			if line.begins_with("class_name "):
+				named.append("%s:%d" % [path, index + 1])
+
+			for folder in own:
+				var needle := "\"res://%s/" % folder
+
+				if line.contains(needle) and not line.contains("Paths.rebase(\"res://%s/" % folder):
+					bare.append("%s:%d" % [path, index + 1])
+
+	_check(named.is_empty(), "no class_name anywhere", ", ".join(named))
+	_check(bare.is_empty(), "no bare res:// path to this game's own files", ", ".join(bare))
+
+	var root := "res://dot_cloud/someone/mg-deathrun/1.0.0/"
+	var once := DrPaths.rebase_onto("res://textures/prototype/deck.png", root)
+	_check(once == root + "textures/prototype/deck.png", "a path is rebased onto a mount", once)
+	_check(DrPaths.rebase_onto(once, root) == once, "and a rebased path is left alone")
+	_finished()
+
+
+func _scripts(dir_path: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var dir := DirAccess.open(dir_path)
+
+	if dir == null:
+		return out
+
+	for file in dir.get_files():
+		if file.ends_with(".gd"):
+			out.append(dir_path.path_join(file))
+
+	for sub in dir.get_directories():
+		out.append_array(_scripts(dir_path.path_join(sub)))
+
+	return out
+
+
+## A trap's timeline, where it is pure: no world, no physics.
+func _test_the_timeline() -> void:
+	_section("a trap is a function of the tick it was pressed on")
+	var timing := {"delay": 0.5, "out": 0.4, "hold": 1.0, "back": 0.6}
+	_check(is_zero_approx(DrCourse.extension(timing, -1.0)), "not pressed is home")
+	_check(is_zero_approx(DrCourse.extension(timing, 0.3)), "inside its delay it has not moved")
+	_check(is_equal_approx(DrCourse.extension(timing, 1.2), 1.0), "held, it is all the way out")
+	_check(DrCourse.extension(timing, 2.1) > 0.0 and DrCourse.extension(timing, 2.1) < 1.0,
+		"going back, it is part of the way", "%.2f" % DrCourse.extension(timing, 2.1))
+	_check(is_zero_approx(DrCourse.extension(timing, 2.6)), "and home after", "%.2f" % DrCourse.extension(timing, 2.6))
+
+	var forever := {"delay": 0.0, "out": 0.3, "hold": -1.0, "back": 1.0}
+	_check(is_equal_approx(DrCourse.extension(forever, 600.0), 1.0) and DrCourse.duration(forever) == INF,
+		"a negative hold stays out for the round")
+	_finished()
+
+
+# --- A world --------------------------------------------------------------------
+
+func _test_world_builds() -> void:
+	_section("a world builds its course, its traps and their buttons")
+	var game := await _world()
+	_check(game.stage.pieces.size() == (game.course_doc["pieces"] as Array).size(),
+		"every piece in the document was built", "%d" % game.stage.pieces.size())
+	_check(game.stage.trap_count() == 5, "every trap was built", "%d" % game.stage.trap_count())
+
+	var a := game.add_player(&"u1", "Ada")
+	var b := game.add_player(&"u2", "Bo")
+	await _step(game, 4)
+	var start: Vector3 = game.course_doc["start"]["at"]
+	_check(absf(a.controller.state.position.y - start.y) < 0.6 and a.controller.state.position.distance_to(start) < 5.0,
+		"a joiner stands in the start", str(a.controller.state.position))
+	_check(a.controller.state.position.distance_to(b.controller.state.position) > 1.0,
+		"two joiners are not put inside each other")
+	_finished()
+
+
+func _test_the_draw() -> void:
+	_section("the activators are drawn each round, and not the same one twice running")
+	var game := await _world()
+	var ids: Array[StringName] = []
+
+	for i in range(4):
+		ids.append(game.add_player(StringName("u%d" % (i + 1)), "P%d" % i).player_id)
+
+	game.start()
+	await _step(game, 2)
+	var first := game.players_on(DrGame.ACTIVATORS)
+	_check(first.size() == 1, "four players, one activator", "%d" % first.size())
+	_check(game.players_on(DrGame.RUNNERS).size() == 3, "and three runners")
+
+	var corridor: Dictionary = game.course_doc["activators"]
+	_check(not first.is_empty() and first[0].controller.state.position.distance_to(corridor["at"]) < 4.0,
+		"the activator starts in their corridor",
+		str(first[0].controller.state.position) if not first.is_empty() else "")
+
+	var repeated := 0
+	var last: StringName = first[0].player_id if not first.is_empty() else &""
+
+	for round_index in range(4):
+		game._decide(DrGame.ACTIVATORS, "test")
+		await _step(game, 3)
+		await _step(game, 2)
+		var now := game.players_on(DrGame.ACTIVATORS)
+
+		if not now.is_empty() and now[0].player_id == last:
+			repeated += 1
+
+		last = now[0].player_id if not now.is_empty() else &""
+
+	_check(repeated == 0, "four more rounds, and nobody was drawn twice running", "%d repeats" % repeated)
+	_finished()
+
+
+func _test_the_gate() -> void:
+	_section("the start gate holds through the countdown, and drops")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 1.5)
+	var players := await _round(game, 2)
+	var runner := players[0]
+	_check(game.phase == DrGame.Phase.COUNTDOWN and game.stage.gate_closed, "the round starts behind the gate")
+
+	var start: Vector3 = game.course_doc["start"]["at"]
+	await _hold_for(game, runner, Vector2(0, 1), 0.0, int(1.2 * TICK_RATE))
+	_check(runner.controller.state.position.z > start.z - 3.4,
+		"running at it during the countdown goes nowhere past it", "z %.2f" % runner.controller.state.position.z)
+
+	await _hold_for(game, runner, Vector2(0, 1), 0.0, int(1.0 * TICK_RATE))
+	_check(game.phase == DrGame.Phase.RUN and not game.stage.gate_closed, "then it drops")
+	_check(runner.controller.state.position.z < start.z - 4.0, "and the runner is through",
+		"z %.2f" % runner.controller.state.position.z)
+	_finished()
+
+
+func _test_the_buttons() -> void:
+	_section("a button fires its trap once, for an activator, when the gate is down")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 1.0)
+	var players := await _round(game, 2)
+	var activator := players[1]
+	var fired: Array = []
+	var refused: Array = []
+	game.trap_fired.connect(func(i: int, t: int, by: StringName) -> void: fired.append([i, t, by]))
+	game.button_refused.connect(func(id: StringName, why: String) -> void: refused.append(why))
+
+	await _press(game, activator, 0)
+	_check(fired.is_empty() and not refused.is_empty(), "behind the gate, a press is refused",
+		str(refused))
+
+	await _step(game, int(1.1 * TICK_RATE))
+	await _press(game, activator, 0)
+	_check(fired.size() == 1 and int(fired[0][0]) == 0 and StringName(fired[0][2]) == activator.player_id,
+		"once it is down, the trap fires, credited to whoever pressed", str(fired))
+
+	refused.clear()
+	await _press(game, activator, 0)
+	_check(fired.size() == 1 and not refused.is_empty(), "pressed again, it is spent", str(refused))
+
+	# Too far from the button: four metres along the walkway from it, looking straight at it.
+	var button := game.stage.button_point(1)
+	activator.place_at(button + Vector3(1.0, -DrCourse.BUTTON_HEIGHT + 0.05, 4.0), 0.0)
+	await _step(game, 2)
+	await _use(game, activator, button)
+	_check(fired.size() == 1, "out of reach, nothing happens")
+
+	# A runner standing at the button presses nothing: the buttons are the activators'.
+	var runner := players[0]
+	runner.place_at(button + Vector3(1.0, -DrCourse.BUTTON_HEIGHT + 0.05, 0.0), 90.0)
+	await _step(game, 2)
+	await _use(game, runner, button)
+	_check(fired.size() == 1, "a runner at a button presses nothing")
+	_finished()
+
+
+func _test_the_trapdoor() -> void:
+	_section("a trapdoor drops whoever is on it into the spikes, and the activator is credited")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 3)
+	var victim := players[0]
+	var bystander := players[1]
+	var activator := players[2]
+	var deaths := _deaths(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	victim.place_at(Vector3(1.4, 0.1, -13.0), 0.0)
+	bystander.place_at(Vector3(0.0, 0.1, -6.0), 0.0)
+	await _step(game, int(0.5 * TICK_RATE))
+	_check(victim.is_alive() and absf(victim.controller.state.position.y) < 0.3,
+		"before the press it is a floor", str(victim.controller.state.position))
+
+	await _press(game, activator, 0)
+	await _step(game, TICK_RATE * 2)
+	_check(not victim.is_alive(), "after it, the one on it is gone", str(victim.controller.state.position))
+	_check(bystander.is_alive(), "and the one beside it is not")
+	_check(_died(deaths, victim.player_id, activator.player_id), "it is the activator's kill", str(deaths))
+	_finished()
+
+
+func _test_the_killers() -> void:
+	_section("a spike wall, a crusher and fire each kill whoever is in them, and nobody else")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 5)
+	var walled := players[0]
+	var crushed := players[1]
+	var burned := players[2]
+	var spared := players[3]
+	var activator := players[4]
+	var deaths := _deaths(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	walled.place_at(Vector3(-1.5, 0.1, -21.0), 0.0)
+	crushed.place_at(Vector3(0.5, 0.1, -27.0), 0.0)
+	burned.place_at(Vector3(0.0, 0.1, -46.0), 0.0)
+	spared.place_at(Vector3(0.0, 0.1, -24.0), 0.0)
+
+	# Crouching under the fire does not help: it fills the corridor to head height.
+	var duck := DotFpsCommand.new()
+	duck.set_button(DotFpsCommand.BUTTON_CROUCH, true)
+	burned.controller.apply_command(duck)
+	await _step(game, 4)
+
+	for index in [1, 2, 4]:
+		await _press(game, activator, index)
+
+	await _step(game, TICK_RATE * 2)
+	_check(not walled.is_alive() and _why(deaths, walled.player_id) == DrGame.DIED_TRAP,
+		"the spike wall crossed the corridor through them", str(walled.controller.state.position))
+	_check(not crushed.is_alive(), "the crusher came down on them")
+	_check(not burned.is_alive(), "the fire caught them, crouched")
+	_check(spared.is_alive(), "and the runner standing between two traps is fine")
+	_finished()
+
+
+func _test_the_carry() -> void:
+	_section("a falling block carries whoever is on it down with it")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 2)
+	var rider := players[0]
+	var activator := players[1]
+	var deaths := _deaths(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	rider.place_at(Vector3(1.0, 0.1, -35.5), 0.0)
+	await _step(game, TICK_RATE)
+	var before := rider.controller.state.position
+	_check(rider.is_alive() and absf(before.y) < 0.3, "standing on a block, they stay up",
+		str(before))
+
+	# Not "are they still alive": the one runner caught ends the round, and the next round has
+	# already stood them back up at the start.
+	await _press(game, activator, 3)
+	await _step(game, int(0.15 * TICK_RATE))
+	_check(rider.controller.state.position.y < before.y - 0.8, "pressed, they go down with it",
+		str(rider.controller.state.position))
+	await _step(game, TICK_RATE)
+	_check(_died(deaths, rider.player_id, activator.player_id), "into the pit, the activator's kill",
+		str(deaths))
+	_finished()
+
+
+func _test_a_bot_runs_the_course() -> void:
+	_section("a stand-in runs the practice course to its end when nobody presses anything")
+	var game := await _world(func(c: DrConfig) -> void:
+		c.bot_fumble_chance = 0.0
+		c.countdown_seconds = 0.5
+	)
+	var bot := game.add_player(&"u900000", "Bot")
+	bot.is_bot = true
+	var other := game.add_player(&"u2", "Bo")
+	game.config.activator_may_repeat = true
+	game.start()
+	await _step(game, 2)
+
+	# Whoever was drawn, the bot runs: the other is put at the buttons.
+	game._set_side(bot.player_id, DrGame.RUNNERS)
+	game._set_side(other.player_id, DrGame.ACTIVATORS)
+	game._place_everybody()
+	var finished_at := -1.0
+
+	for i in range(TICK_RATE * 40):
+		other.controller.apply_command(DotFpsCommand.new())
+		await _step(game, 1)
+
+		if bot.finished:
+			finished_at = game.run_elapsed
+			break
+
+	_check(bot.finished and bot.place == 1, "it got to the end", "at %s, alive %s" % [
+		bot.controller.state.position, bot.is_alive()])
+	_check(finished_at > 0.0 and finished_at < 30.0, "inside thirty seconds", "%.1f s" % finished_at)
+	_finished()
+
+
+func _test_the_end() -> void:
+	_section("the first runner across is armed at the end, and calls the activators to it")
+	var game := await _world(func(c: DrConfig) -> void:
+		c.countdown_seconds = 0.2
+		c.arrival_grace_seconds = 0.5
+	)
+	var players := await _round(game, 3)
+	var runner := players[0]
+	var activator := players[2]
+	await _step(game, int(0.3 * TICK_RATE))
+
+	runner.place_at(game.course_doc["finish"]["at"], 0.0)
+	await _step(game, 2)
+	_check(runner.finished and runner.at_end, "across the line, a runner is in the end arena")
+	_check(runner.weapons != null, "with a weapon in their hands")
+	_check(game.phase == DrGame.Phase.SHOWDOWN and activator.at_end and activator.weapons != null,
+		"and the activator has been called down, armed")
+	_check(is_equal_approx(activator.health.health, game.config.player_health * game.config.activator_health_scale),
+		"tougher, because it is one against several", "%.0f" % activator.health.health)
+	_check(runner.health.invulnerable, "nobody can be hurt the moment they arrive")
+	await _step(game, int(0.6 * TICK_RATE))
+	_check(not runner.health.invulnerable and not activator.health.invulnerable, "and then they can")
+
+	# The end's activator corridor is empty: a press from down here does nothing.
+	var fired: Array = []
+	game.trap_fired.connect(func(i: int, _t: int, _by: StringName) -> void: fired.append(i))
+	activator.wants_use = true
+	await _step(game, 2)
+	activator.wants_use = false
+	_check(fired.is_empty(), "an activator at the end presses nothing")
+	_finished()
+
+
+func _test_the_traps_win() -> void:
+	_section("every runner caught is the activators' round")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 3)
+	var ended := _ends(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	for runner in [players[0], players[1]]:
+		(runner as DrPlayer).place_at(Vector3(0.0, -7.0, -35.0), 0.0)
+
+	await _step(game, TICK_RATE)
+	_check(ended.size() == 1 and int(ended[0][1]) == DrGame.ACTIVATORS, "the activators won",
+		str(ended))
+	_finished()
+
+
+func _test_the_runners_win() -> void:
+	_section("an activator put down at the end is the runners' round, and so is one who leaves")
+	var game := await _world(func(c: DrConfig) -> void:
+		c.countdown_seconds = 0.2
+		c.arrival_grace_seconds = 0.1
+	)
+	var players := await _round(game, 3)
+	var runner := players[0]
+	var activator := players[2]
+	var ended := _ends(game)
+	var deaths := _deaths(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	runner.place_at(game.course_doc["finish"]["at"], 0.0)
+	await _step(game, int(0.3 * TICK_RATE))
+	var shot := DotDamage.make(runner.entity_id, activator.entity_id, 1000.0, null)
+	shot.tick = game.current_tick()
+	var _applied := game.combat.apply_damage(shot)
+	await _step(game, 3)
+	_check(ended.size() == 1 and int(ended[0][1]) == DrGame.RUNNERS, "the runners won", str(ended))
+	_check(_died(deaths, activator.player_id, runner.player_id), "the kill is the runner's")
+
+	var second := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var others := await _round(second, 3)
+	var ended_again := _ends(second)
+	await _step(second, int(0.3 * TICK_RATE))
+	second.remove_player(others[2].player_id)
+	await _step(second, 3)
+	_check(ended_again.size() == 1 and int(ended_again[0][1]) == DrGame.RUNNERS,
+		"an activator who leaves hands the runners the round", str(ended_again))
+	_finished()
+
+
+func _test_the_clock() -> void:
+	_section("the clock is the activators' round by default, and the server's to change")
+	var game := await _world(func(c: DrConfig) -> void:
+		c.countdown_seconds = 0.2
+		c.round_seconds = 30.0
+	)
+	var _players := await _round(game, 2)
+	var ended := _ends(game)
+	await _step(game, int(0.3 * TICK_RATE))
+	game.run_elapsed = 29.95
+	await _step(game, int(0.4 * TICK_RATE))
+	_check(ended.size() == 1 and int(ended[0][1]) == DrGame.ACTIVATORS, "the activators won on time",
+		str(ended))
+
+	var draw := await _world(func(c: DrConfig) -> void:
+		c.countdown_seconds = 0.2
+		c.round_seconds = 30.0
+		c.timeout_winner = 0
+	)
+	var _more := await _round(draw, 2)
+	var drawn := _ends(draw)
+	await _step(draw, int(0.3 * TICK_RATE))
+	draw.run_elapsed = 29.95
+	await _step(draw, int(0.4 * TICK_RATE))
+	_check(drawn.size() == 1 and int(drawn[0][1]) == 0, "with `timeout_winner 0` it is a draw", str(drawn))
+	_finished()
+
+
+func _test_a_late_joiner() -> void:
+	_section("somebody who joins mid-round watches it, and decides nothing")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 2)
+	var ended := _ends(game)
+	await _step(game, int(0.5 * TICK_RATE))
+
+	var late := game.add_player(&"u77", "Late")
+	await _step(game, 3)
+	_check(late.watching and game.alive_on(DrGame.RUNNERS) == 1,
+		"they watch, and are not counted as a runner", "%d runners" % game.alive_on(DrGame.RUNNERS))
+
+	players[0].place_at(Vector3(0.0, -7.0, -35.0), 0.0)
+	await _step(game, TICK_RATE)
+	_check(ended.size() == 1 and int(ended[0][1]) == DrGame.ACTIVATORS,
+		"the last real runner caught still ends the round", str(ended))
+	_finished()
+
+
+func _test_a_bot_at_the_buttons() -> void:
+	_section("a stand-in at the buttons walks to a trap and presses it on a runner in it")
+	var game := await _world(func(c: DrConfig) -> void:
+		c.countdown_seconds = 0.2
+		c.bot_trap_delay = 0.2
+	)
+	var runner := game.add_player(&"u1", "Ada")
+	var bot := game.add_player(&"u900001", "Bot")
+	bot.is_bot = true
+	game.start()
+	await _step(game, 2)
+	game._set_side(runner.player_id, DrGame.RUNNERS)
+	game._set_side(bot.player_id, DrGame.ACTIVATORS)
+	game._place_everybody()
+	var fired: Array = []
+	game.trap_fired.connect(func(i: int, _t: int, by: StringName) -> void: fired.append([i, by]))
+	var deaths := _deaths(game)
+	await _step(game, int(0.3 * TICK_RATE))
+
+	# Standing in the crusher, and waiting for it.
+	runner.place_at(Vector3(0.0, 0.1, -27.0), 0.0)
+
+	for _i in range(TICK_RATE * 12):
+		runner.controller.apply_command(DotFpsCommand.new())
+		await _step(game, 1)
+
+		if not fired.is_empty():
+			break
+
+	await _step(game, TICK_RATE)
+	_check(not fired.is_empty() and int(fired[0][0]) == 2 and StringName(fired[0][1]) == bot.player_id,
+		"it pressed the crusher", str(fired))
+	_check(_died(deaths, runner.player_id, bot.player_id), "and the runner in it is gone, the bot's kill",
+		str(deaths))
+	_finished()
+
+
+func _test_progress() -> void:
+	_section("what a player keeps: a trap's kill is the activator's, and every achievement counts")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 2)
+	var victim := players[0]
+	var activator := players[1]
+	await _step(game, int(0.3 * TICK_RATE))
+	victim.place_at(Vector3(0.0, 0.1, -46.0), 0.0)
+	await _step(game, 2)
+	await _press(game, activator, 4)
+	await _step(game, TICK_RATE)
+
+	var values := game.progress.session_values(activator.player_id)
+	_check(is_equal_approx(values.get_value(DrProgress.TRAP_KILLS), 1.0),
+		"the activator has one runner trapped", str(values.get_value(DrProgress.TRAP_KILLS)))
+	_check(is_equal_approx(values.get_value(DrProgress.PRESSES), 1.0), "and one trap sprung")
+
+	var declared := DrProgress.ids()
+	var unread := PackedStringArray()
+
+	for achievement in DrProgress.catalogue().achievements:
+		for rule in achievement.requirements:
+			if not declared.has(rule.stat):
+				unread.append(String(rule.stat))
+
+	_check(unread.is_empty(), "every achievement reads a number the schema declares", ", ".join(unread))
+	_finished()
+
+
+# --- Helpers ------------------------------------------------------------------------
+
+## A round on [param game] with [param count] people in it, the LAST of them the one
+## activator — whoever the draw picked. Returned runners first.
+func _round(game: DrGame, count: int) -> Array[DrPlayer]:
+	var out: Array[DrPlayer] = []
+
+	for i in range(count):
+		out.append(game.add_player(StringName("u%d" % (i + 1)), "P%d" % (i + 1)))
+
+	game.start()
+	await _step(game, 2)
+
+	for i in range(count):
+		game._set_side(out[i].player_id, DrGame.ACTIVATORS if i == count - 1 else DrGame.RUNNERS)
+
+	game._place_everybody()
+	await _step(game, 2)
+	return out
+
+
+## Puts [param activator] at trap [param index]'s button, looking at it, and presses.
+func _press(game: DrGame, activator: DrPlayer, index: int) -> void:
+	var button := game.stage.button_point(index)
+	# On the walkway beside the button: its top is BUTTON_HEIGHT above the floor it stands on.
+	activator.place_at(button + Vector3(1.0, -DrCourse.BUTTON_HEIGHT + 0.05, 0.0), 90.0)
+	await _step(game, 1)
+	await _use(game, activator, button)
+
+
+## Looks at [param at] and presses the use key for a tick, then lets go.
+func _use(game: DrGame, player: DrPlayer, at: Vector3) -> void:
+	var look := at - player.eye_position()
+	var command := DotFpsCommand.new()
+	command.yaw = rad_to_deg(atan2(-look.x, -look.z))
+	command.pitch = clampf(rad_to_deg(asin(clampf(look.normalized().y, -1.0, 1.0))), -89.0, 89.0)
+	player.controller.apply_command(command)
+	await _step(game, 1)
+	player.wants_use = true
+	await _step(game, 1)
+	player.wants_use = false
+	await _step(game, 1)
+
+
+func _deaths(game: DrGame) -> Array:
+	var out: Array = []
+	game.player_died.connect(func(id: StringName, by: StringName, why: StringName) -> void:
+		out.append([id, by, why]))
+	return out
+
+
+func _ends(game: DrGame) -> Array:
+	var out: Array = []
+	game.round_over.connect(func(n: int, w: int, why: String) -> void: out.append([n, w, why]))
+	return out
+
+
+func _died(deaths: Array, id: StringName, by: StringName) -> bool:
+	for entry: Array in deaths:
+		if StringName(entry[0]) == id and StringName(entry[1]) == by:
+			return true
+
+	return false
+
+
+func _why(deaths: Array, id: StringName) -> StringName:
+	for entry: Array in deaths:
+		if StringName(entry[0]) == id:
+			return StringName(entry[2])
+
+	return &""
+
+
+## Holds a direction for [param ticks]. Applied every tick, because the motor repeats a
+## starved tick's view and buttons but drops its movement.
+func _hold_for(game: DrGame, player: DrPlayer, move: Vector2, yaw: float, ticks: int) -> void:
+	for _i in range(ticks):
+		var command := DotFpsCommand.new()
+		command.move = move
+		command.yaw = yaw
+		player.controller.apply_command(command)
+		await _step(game, 1)
+
+
+func _section(name: String) -> void:
+	_sections_entered += 1
+	print(name)
+
+
+func _finished() -> void:
+	_sections_finished += 1
+
+
+func _check(ok: bool, what: String, detail: String = "") -> void:
+	if ok:
+		_passed += 1
+		print("  ok    %s%s" % [what, "" if detail == "" else "  (%s)" % detail])
+		return
+
+	_failed += 1
+	var line := "%s%s" % [what, "" if detail == "" else "  (%s)" % detail]
+	_failures.append(line)
+	print("  FAIL  %s" % line)
+
+
+## A world on the practice course, stepped by hand.
+##
+## [b]The previous world is freed first.[/b] mg-wipeout's finding: every world here is a child
+## of this node, so all of them share ONE physics space, and every course is built at the
+## origin — a world left standing kept its start gate exactly where the next one's runner had
+## to go.
+func _world(configure: Callable = Callable()) -> DrGame:
+	for old in _worlds.duplicate():
+		await _dispose(old)
+
+	var config := DrConfig.new()
+	config.warmup_seconds = 0.0
+	config.intermission_seconds = 0.0
+	config.minimum_players = 0
+	config.course_ids = PackedStringArray(["dr_practice"])
+	config.keep_progress = true
+
+	if configure.is_valid():
+		configure.call(config)
+
+	var game := DrGame.new()
+	game.name = "World%d" % _worlds.size()
+	game.config = config
+	game.tick_rate = TICK_RATE
+	game.authoritative = true
+	game.register_service = false
+	add_child(game)
+	game.set_physics_process(false)
+	_worlds.append(game)
+
+	# Two frames, so every collider is in the physics space before anything is asserted.
+	await _physics_frame()
+	await _physics_frame()
+	return game
+
+
+func _step(game: DrGame, ticks: int) -> void:
+	for _i in range(ticks):
+		game.simulate(TICK)
+		await _physics_frame()
+
+
+func _physics_frame() -> void:
+	await get_tree().physics_frame
+
+
+func _dispose(game: DrGame) -> void:
+	_worlds.erase(game)
+
+	if not is_instance_valid(game):
+		return
+
+	remove_child(game)
+	game.free()
+	await get_tree().process_frame
