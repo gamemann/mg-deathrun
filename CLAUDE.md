@@ -120,6 +120,10 @@ The brief asked for map voting. **A round here is a course**, so dot-vote's ROUN
 
 A trap waits `trap_tell_seconds` (0.35) after its button before it moves, and its parts flash red through it, so reading the activator is a skill. **Written into the document**, not into either end: `DrGame.with_tell` adds it to every trap's `delay` (and records it as `timing.tell`) before the server builds the course and sends it, so a client predicts the trap at exactly the server's tick. Only in `_lay_out_course`, where the catalogue's documents are pristine, so a rebuild never adds it twice. The flash is a `material_overlay` per part instance (`DrCourse._draw_tell`), drawn only: a trapdoor that shook would carry whoever stood on it. 0 restores the instant trap. `headless_run` checks the trap tells and nobody moves, then they fall; `headless_net` waits the tell out before it expects the client's player to go down. Rendered: `tools/shot.sh --view=trap --trap=ice_jaws --after=0.05`.
 
+## Bunny-hop stretches (2026-10-06)
+
+mg-deathrun-maps' `hops` section: small platforms over a pit, side to side, 2.4 m apart against a running jump of about 4.8 m (7 m/s, 1.2 m, gravity 20), in both courses after the falling blocks. Clearable a landing at a time with auto-hop off, which is the default and what `headless_courses`' stand-in proves; built for chaining, which `auto_bunny_hop` makes holding a key and the air strafing makes a skill.
+
 ## The machinery is heard
 
 A trap sounds like its machine (`DrAudio.trap_sound`): a part that spins is a saw's whine, fire is a burner's roar, a part that turns or a floor that moves away is a trapdoor's bang, spikes that close sideways grind, spikes that travel up or down are a heavy thud, and anything else is the old impact. Told from the parts because a trap is parts and not a kind; a mapper who wants otherwise writes `"sound"` on the trap (`DrCourseDoc.TRAP_SOUNDS`). The five are synthesised in `dr_audio.gd` into dot-audio's bank under the id and the path a real file would have, so an `.ogg` in `audio/` still wins. `headless_courses` checks the known traps' machines; `tools/audio_probe` (xvfb only) plays all five under ALSA.
@@ -129,5 +133,4 @@ A trap sounds like its machine (`DrAudio.trap_sound`): a part that spins is a sa
 In the order they are worth doing.
 
 1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. dot-server-deploy has `content/deathrun/` and `content/deathrun_maps/` and `examples/deathrun_client` (19 checks, 2026-10-06): the delivered pack boots, a real client joins over a real socket, the courses are mounted where `_add_delivered_courses` looks, and the client builds the server's course and traps from the document. What is left is the owner's: the repositories, the release order, publishing.
-2. **Bunny-hop sections.** `auto_bunny_hop` and the air control are there; no course yet has a stretch built for them.
-3. **A world model in a watcher's hands**, as mg-smash-copter's list says.
+2. **A world model in a watcher's hands**, as mg-smash-copter's list says.
