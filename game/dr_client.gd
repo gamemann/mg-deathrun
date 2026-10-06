@@ -392,7 +392,8 @@ func _on_trap(index: int, _tick: int, by: int) -> void:
 	var at := game.stage.trap_zone(index).get_center()
 
 	if audio != null:
-		var _heard := audio.on_trap(at)
+		var spec: Variant = game.stage.traps[index].get("spec", {})
+		var _heard := audio.on_trap(at, spec if spec is Dictionary else {})
 
 	if game.effects != null and camera != null:
 		game.effects.viewer_position = camera.global_position

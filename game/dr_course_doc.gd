@@ -41,6 +41,9 @@ const MAX_PIECES := 600
 const MAX_TRAPS := 48
 const MAX_PARTS := 32
 
+## The machinery a trap can sound like, for a mapper who wants to say so (`"sound"`).
+const TRAP_SOUNDS: Array[String] = ["", "saw", "drop", "crush", "fire", "grind", "impact"]
+
 ## Every piece kind, and the fields each one must have. The meaning of each is in [DrCourse].
 const PIECES := {
 	# Still things.
@@ -337,6 +340,10 @@ static func _trap(source: Variant, index: int) -> DotResult:
 		# Seconds from one press until the button can be pressed again. 0 is once a round,
 		# which is what the servers this game is modelled on do with almost every trap.
 		"cooldown": maxf(float(trap.get("cooldown", 0.0)), 0.0),
+		# What it sounds like when it goes: one of [constant TRAP_SOUNDS], or "" for the game
+		# to tell from what its parts do (DrAudio.trap_sound). A name this build does not have
+		# is "" rather than a refusal: a sound is never a reason a course will not load.
+		"sound": str(trap.get("sound", "")) if TRAP_SOUNDS.has(str(trap.get("sound", ""))) else "",
 		"timing": {
 			"delay": maxf(float(timing.get("delay", 0.0)), 0.0),
 			# The share of the delay that is the server's tell (DrGame.with_tell), kept so a

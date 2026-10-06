@@ -28,8 +28,19 @@ const CHANNEL := "dr.audio"
 ## mounts this game somewhere other than `res://`.
 static var SOUND_DIR := DrPaths.rebase("res://audio")
 
-## A trap going off. Positional: you hear it where it is.
+## A trap going off. Positional: you hear it where it is. [constant TRAP] is the generic
+## impact; the others are the machinery, chosen per trap by [method trap_sound].
 const TRAP := &"trap"
+## A blade spinning up: a whine.
+const TRAP_SAW := &"trap_saw"
+## A floor leaving: a trapdoor's bang, a bridge rolling over, steps dropping away.
+const TRAP_DROP := &"trap_drop"
+## Something heavy arriving: a press, jaws, a spike floor.
+const TRAP_CRUSH := &"trap_crush"
+## A burner lighting.
+const TRAP_FIRE := &"trap_fire"
+## Walls closing: metal dragged along metal.
+const TRAP_GRIND := &"trap_grind"
 ## A runner across the finish; flat and louder when it is you.
 const FINISH := &"finish"
 ## The countdown's last seconds, and the gate dropping.
@@ -56,7 +67,7 @@ var manager: DotAudioManager = null
 
 static func ids() -> Array[StringName]:
 	return [
-		TRAP, FINISH, COUNTDOWN, GATE, PLAYER_DOWN, YOU_ARE_OUT, ROUND_START, ROUND_END,
+		TRAP, TRAP_SAW, TRAP_DROP, TRAP_CRUSH, TRAP_FIRE, TRAP_GRIND, FINISH, COUNTDOWN, GATE, PLAYER_DOWN, YOU_ARE_OUT, ROUND_START, ROUND_END,
 		SHOWDOWN, WEAPON_SHOT, WEAPON_SWING, WEAPON_LAUNCH, WEAPON_BEAM, WEAPON_THROW,
 		UI_CLICK, UI_DENY,
 	]
@@ -68,6 +79,9 @@ static func sound_catalogue() -> DotAudioCatalogue:
 	var c := DotAudioCatalogue.new()
 
 	c.add(_placed(TRAP, 60.0, 12.0, 4, 85, 0.9, 1.1))
+
+	for machine: StringName in [TRAP_SAW, TRAP_DROP, TRAP_CRUSH, TRAP_FIRE, TRAP_GRIND]:
+		c.add(_placed(machine, 60.0, 12.0, 4, 85, 0.94, 1.06))
 	c.add(_placed(PLAYER_DOWN, 80.0, 12.0, 3, 65, 0.95, 1.05))
 
 	c.add(_flat(FINISH, &"UI", 2, 80))
@@ -127,6 +141,67 @@ static func sound_recipes() -> Dictionary:
 		UI_CLICK: DotAudioSynth.Voice.CLICK,
 		UI_DENY: DotAudioSynth.Voice.DENY,
 	}
+
+
+## Which machinery a trap sounds like: what its document says, or what its parts do.
+##
+## [b]Read from the parts because a trap is parts, not a kind[/b] (see DrCourseDoc._trap): a
+## part that spins is a saw, fire is fire, a part that turns or a floor that moves away is
+## a floor leaving, spikes that travel are something arriving, and anything else is the
+## impact every trap made before there were machines. Walls that close sideways grind.
+static func trap_sound(spec: Dictionary) -> StringName:
+	match str(spec.get("sound", "")):
+		"saw":
+			return TRAP_SAW
+		"drop":
+			return TRAP_DROP
+		"crush":
+			return TRAP_CRUSH
+		"fire":
+			return TRAP_FIRE
+		"grind":
+			return TRAP_GRIND
+		"impact":
+			return TRAP
+
+	var parts: Array = spec.get("parts", [])
+	var falls := false
+	var arrives := false
+	var sideways := false
+
+	for part: Variant in parts:
+		if not (part is Dictionary):
+			continue
+
+		var d := part as Dictionary
+
+		if absf(float(d.get("spin", 0.0))) > 0.0:
+			return TRAP_SAW
+
+		if str(d.get("look", "")) == "fire":
+			return TRAP_FIRE
+
+		var move: Variant = d.get("move", Vector3.ZERO)
+		var by: Vector3 = move if move is Vector3 else Vector3.ZERO
+
+		if d.has("turn") or (not bool(d.get("lethal", false)) and by.y < -0.5):
+			falls = true
+		elif bool(d.get("lethal", false)) and by.length() > 0.1:
+			if absf(by.y) < 0.1:
+				sideways = true
+			else:
+				arrives = true
+
+	if falls:
+		return TRAP_DROP
+
+	if sideways:
+		return TRAP_GRIND
+
+	if arrives:
+		return TRAP_CRUSH
+
+	return TRAP
 
 
 static func weapon_sound(kind: int) -> StringName:
@@ -203,6 +278,7 @@ func setup() -> DotResult:
 
 	if godot_sink != null:
 		godot_sink.bank = DotAudioSynth.bank(manager.catalogue, sound_recipes())
+		_bake_machinery(godot_sink.bank, manager.catalogue)
 		# INFO, once: the answer to "why does it sound like that" is in this line.
 		DotLog.info(CHANNEL, "no audio files; synthesised stand-ins are in use", {
 			"ids": sound_recipes().size(), "dir": SOUND_DIR,
@@ -217,8 +293,9 @@ func listen_from(at: Vector3) -> void:
 		manager.listener_position = at
 
 
-func on_trap(at: Vector3) -> bool:
-	return _at(TRAP, at)
+## [param spec] is the trap's document; without one it is the generic impact.
+func on_trap(at: Vector3, spec: Dictionary = {}) -> bool:
+	return _at(trap_sound(spec) if not spec.is_empty() else TRAP, at)
 
 
 func on_finish(mine: bool) -> bool:
@@ -267,6 +344,134 @@ func _at(id: StringName, at: Vector3, volume: float = 1.0) -> bool:
 
 func _flat_play(id: StringName) -> bool:
 	return manager != null and manager.play(id) != 0
+
+
+# --- The machinery, synthesised ---------------------------------------------------
+#
+# dot-audio's voices are one swept tone with noise, which is a click, a shot or a blip; a saw
+# winding up or a press landing is several things at once, so these are baked here, into the
+# same bank, under the id and the path a real file would have. A real `.ogg` still wins.
+
+const RATE := 22050
+
+
+static func _bake_machinery(bank: Dictionary, catalogue: DotAudioCatalogue) -> void:
+	var made := {
+		TRAP_SAW: _saw(), TRAP_DROP: _drop(), TRAP_CRUSH: _crush(),
+		TRAP_FIRE: _fire(), TRAP_GRIND: _grind(),
+	}
+
+	for id: StringName in made:
+		bank[id] = made[id]
+		var def := catalogue.find(id)
+
+		if def != null and not def.path.is_empty():
+			bank[def.path] = made[id]
+
+
+static func _wav(samples: PackedFloat32Array) -> AudioStreamWAV:
+	var data := PackedByteArray()
+	data.resize(samples.size() * 2)
+
+	for i in samples.size():
+		data.encode_s16(i * 2, int(clampf(samples[i], -1.0, 1.0) * 32767.0))
+
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = RATE
+	wav.data = data
+	return wav
+
+
+static func _buffer(seconds: float) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(int(RATE * seconds))
+	return out
+
+
+## A blade winding up and running: a sawtooth climbing from 600 to 1500 Hz, with grit.
+static func _saw() -> AudioStreamWAV:
+	var out := _buffer(1.3)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var phase := 0.0
+
+	for i in out.size():
+		var t := float(i) / RATE
+		phase = fmod(phase + lerpf(600.0, 1500.0, minf(t / 0.5, 1.0)) / RATE, 1.0)
+		var env := minf(t / 0.05, 1.0) * clampf((1.3 - t) / 0.4, 0.0, 1.0)
+		out[i] = ((phase * 2.0 - 1.0) * 0.30 + rng.randf_range(-1.0, 1.0) * 0.08) * env
+
+	return _wav(out)
+
+
+## A trapdoor going: the latch's crack, then the leaves hitting their stops, low and wooden.
+static func _drop() -> AudioStreamWAV:
+	var out := _buffer(0.7)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 22
+
+	for i in out.size():
+		var t := float(i) / RATE
+		var crack := rng.randf_range(-1.0, 1.0) * exp(-t * 60.0) * 0.6
+		var thud := 0.0
+
+		if t > 0.12:
+			var u := t - 0.12
+			thud = sin(TAU * lerpf(110.0, 60.0, minf(u / 0.3, 1.0)) * u) * exp(-u * 9.0) * 0.8
+			thud += rng.randf_range(-1.0, 1.0) * exp(-u * 30.0) * 0.25
+
+		out[i] = crack + thud
+
+	return _wav(out)
+
+
+## Something heavy landing: a very low thump with a noise body.
+static func _crush() -> AudioStreamWAV:
+	var out := _buffer(0.8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var low := 0.0
+
+	for i in out.size():
+		var t := float(i) / RATE
+		low = lerpf(low, rng.randf_range(-1.0, 1.0), 0.08)
+		out[i] = (sin(TAU * lerpf(70.0, 38.0, minf(t / 0.4, 1.0)) * t) * 0.85 + low * 1.4) * exp(-t * 6.0)
+
+	return _wav(out)
+
+
+## A burner lighting: a whoomp, then a roar that falls away.
+static func _fire() -> AudioStreamWAV:
+	var out := _buffer(1.5)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 24
+	var low := 0.0
+
+	for i in out.size():
+		var t := float(i) / RATE
+		low = lerpf(low, rng.randf_range(-1.0, 1.0), 0.12)
+		var whoomp := sin(TAU * 55.0 * t) * exp(-t * 10.0) * 0.5
+		var flicker := 0.8 + 0.2 * sin(TAU * 7.0 * t)
+		out[i] = whoomp + low * 1.5 * flicker * minf(t / 0.06, 1.0) * clampf((1.5 - t) / 0.7, 0.0, 1.0)
+
+	return _wav(out)
+
+
+## Walls dragged closed: mid noise chattering at 28 Hz, the way metal skips along metal.
+static func _grind() -> AudioStreamWAV:
+	var out := _buffer(1.0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 25
+	var mid := 0.0
+
+	for i in out.size():
+		var t := float(i) / RATE
+		mid = lerpf(mid, rng.randf_range(-1.0, 1.0), 0.35)
+		var chatter := 0.55 + 0.45 * sin(TAU * 28.0 * t)
+		out[i] = mid * 0.7 * chatter * minf(t / 0.04, 1.0) * clampf((1.0 - t) / 0.3, 0.0, 1.0)
+
+	return _wav(out)
 
 
 func describe() -> Dictionary:

@@ -1,5 +1,6 @@
 extends Node
 
+const DrAudio := preload("../game/dr_audio.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrCourse := preload("../game/dr_course.gd")
@@ -50,6 +51,7 @@ func _run() -> void:
 
 	_section("every document loads")
 	_check(catalogue.refused.is_empty(), "none was refused", str(catalogue.refused))
+	_check_machinery(catalogue)
 	_finished()
 
 	var traps := 0
@@ -67,7 +69,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 4
-	var checks := 1 + courses.size() * (2 + 1 + 2) + traps
+	var checks := 2 + courses.size() * (2 + 1 + 2) + traps
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -91,6 +93,30 @@ func _run() -> void:
 		code = 1
 
 	get_tree().quit(code)
+
+
+## Every trap sounds like what it is, told from its parts: the traps whose machine is not in
+## doubt, wherever they are in the catalogue, and a practice-only build checks its own.
+func _check_machinery(catalogue: DrCatalogue) -> void:
+	var expected := {
+		"fd_saws": DrAudio.TRAP_SAW, "fd_jets": DrAudio.TRAP_FIRE, "fd_press": DrAudio.TRAP_CRUSH,
+		"fd_steps": DrAudio.TRAP_DROP, "fd_bridge": DrAudio.TRAP_DROP, "ice_trapdoor": DrAudio.TRAP_DROP,
+		"ice_walls": DrAudio.TRAP_GRIND, "ice_jaws": DrAudio.TRAP_CRUSH,
+	}
+	var wrong := PackedStringArray()
+	var heard := {}
+
+	for id: StringName in catalogue.courses:
+		for trap: Dictionary in catalogue.courses[id]["traps"]:
+			var sound := DrAudio.trap_sound(trap)
+			heard[sound] = true
+
+			if expected.has(trap["id"]) and expected[trap["id"]] != sound:
+				wrong.append("%s is %s" % [trap["id"], sound])
+
+	var named := DrAudio.trap_sound({"sound": "grind", "parts": [{"spin": 900.0}]}) == DrAudio.TRAP_GRIND
+	_check(wrong.is_empty() and named and (catalogue.courses.size() <= 1 or heard.size() >= 4),
+		"every trap sounds like its machine, and a document can say which", "%s; %d kinds" % [", ".join(wrong), heard.size()])
 
 
 ## A stand-in runs the course with nobody pressing anything, and gets to the end.
