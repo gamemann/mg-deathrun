@@ -1,105 +1,128 @@
-This is a game to demonstrate the capabilities of the [**Dot collection**](https://moddingcommunity.com/co/4-dot-assets) built on-top of [Godot 4](https://godotengine.org/) and [TMC's gaming platform](https://moddingcommunity.com/play). In this 3D game, most of the server are **runners**, racing one long corridor full of traps. One or more players are drawn each round to be the **activators**: they stand on a walkway beside the corridor with a button for every trap — a trapdoor, closing spike walls, a crusher, a rolling log, sinking ice floes, saws, fire — and press them while the runners are in them. A trap is a death and nothing comes back. Whoever reaches the end is handed a weapon, and the first one there calls the activators down to settle it.
+This is a game to demonstrate the capabilities of the [**Dot collection**](https://moddingcommunity.com/co/4-dot-assets) built on-top of [Godot 4](https://godotengine.org/) and [TMC's gaming platform](https://moddingcommunity.com/play). In this 3D game, most players are **runners** racing down a long course full of traps, while one or more **activators** stand beside it with a button for every trap and try to kill them. Whoever makes it to the end gets a weapon and fights the activators. This is inspired by the classic deathrun minigame maps!
 
-The game ships with three courses: a short practice run, **Ice Works** and **The Foundry**, all written as documents rather than scenes.
-
-**This project and the assets under it are COMPLETELY OPEN SOURCE**. You are free to use, modify, and distribute them under the terms of the MIT license. The only thing not open source is the back-end web infrastructure.
+**This project and the assets under it are COMPLETELY OPEN SOURCE**. You are free to use, modify, and distribute them under the terms of the MIT license. The only thing not open source is the back-end web infrastructure. So if you opt into using your own authentication backend instead of integrating with TMC, you will need to build and integrate your own back-end infrastructure.
 
 ## From Maintainer & WARNING
 This project, along with every asset it is built on, was built initially with **Claude Code** and will continue to be maintained and extended using it. This is because I (`gamemann`) cannot build the entire TMC platform alone (I wish I could lol).
 
-**Please treat this as early and partially tested.** It has four headless test suites and they pass — including one in which a stand-in runs every course to its end and every trap is sprung on somebody standing in it — but none of it has been in front of real players yet, and it has not yet been published as a pack. Expect rough edges, and please report anything you run into.
+**Please treat this as partially tested.** It has its own headless test suite and that suite passes, but very little of this has been in front of real players yet. Expect rough edges, and please report anything you run into.
 
-## A round
+I intend on reviewing code, testing, and editing documentation regularly. If you're interested in helping out, please let me know!
 
-Everybody is put in place at once: the runners behind the start gate, the activators at the near end of their walkway. When the gate drops, the course is open.
+## How it plays
+Everybody starts at once: the runners behind the start gate, the activators at the start of a walkway that runs beside the course. When the gate drops:
 
-- **Runners** run. Every trap is still until somebody presses its button, so the danger is a person: watch the activator, bait a trap, wait for it to be spent, then go. Get caught and you watch the rest of the round.
-- **Activators** walk their walkway and press **E** at a button while somebody is in its trap. Most traps work once a round; the list down the right of the screen says which are left, and the line under the crosshair says which button E would press.
-- **The end.** The first runner across the finish is handed a weapon in the end arena, and every activator is called down to it, armed and a little tougher, because it is one against several. Everybody who makes it after them arrives armed too.
+- **Runners** run. A trap does nothing until somebody presses its button, so the danger is the activator: watch them, bait a trap, wait for it to be used up, then go. If a trap gets you, you watch the rest of the round.
+- **Activators** walk along their walkway and press **E** at a button while somebody is in that trap: trapdoors, closing spike walls, a crusher, a rolling log, sinking ice, saws and fire. Most traps work once a round. The list on the right of the screen shows which are left.
+- **The end.** The first runner across the finish gets a weapon in the end arena, and the activators are called down to fight them (armed, and a little tougher, since it's one against several). Anybody who makes it after them arrives armed too.
 
-Every runner caught is the activators' round. Every activator put down — or gone — is the runners'. If the clock runs out it is the activators' round, unless the server says otherwise.
+The runners win if every activator is killed or leaves. The activators win if every runner is caught, or if the clock runs out. A new set of activators is drawn each round, one for every eight players by default, from people who weren't one last round. Some stretches of the courses are bunny-hop jumps.
 
-The activators are drawn at random each round from everybody who was not an activator last round, one for every ten players.
+Partway through each course, players vote for the next one (`!vote 2`, `!rtv`, `!nominate dr_foundry`).
 
-## Running it
-
-```bash
-godot --path .                                                    # play it, alone, against stand-ins
-godot --headless --path . res://examples/headless_run.tscn         # the simulation, 86 checks
-godot --headless --path . res://examples/headless_courses.tscn     # every course played
-godot --headless --path . res://examples/headless_net.tscn         # over the wire, 39 checks
-godot --headless --path . res://examples/dedicated.tscn            # as a real server, 27 checks
-tools/shot.sh --view=activator                                     # what the activator sees
-tools/shot.sh --view=trap --trap=ice_jaws --dr-course-ids=dr_ice_works   # a trap, mid-run
-```
-
-Offline you play against three stand-ins: when you are a runner, one of them is at the buttons; when you are the activator, they run.
+There are three courses: a short practice run built into the game, and **Ice Works** and **The Foundry** from [mg-deathrun-maps](https://github.com/gamemann/mg-deathrun-maps).
 
 ## Controls
 
-| | |
+| Key | Action |
 | --- | --- |
-| WASD, mouse | Run and look |
-| Space | Jump |
-| Shift | Walk — for a narrow ledge |
-| Ctrl | Crouch |
-| E | Press the button in front of you (activators) |
-| Left mouse | Fire, at the end |
-| Right mouse, R, 1–5 | Alt-fire, reload, weapon slots |
-| F5 | First person / third person |
+| **WASD** / mouse | Run and look |
+| **Space** | Jump |
+| **Shift** | Walk (for a narrow ledge) |
+| **Ctrl** | Crouch |
+| **E** | Press the button in front of you (activators) |
+| **Mouse 1** | Fire, at the end |
+| **Mouse 2** / **R** / **1**-**5** | Alt-fire / reload / weapon slots |
+| **F5** | First or third person |
 
-## Configuring a server
+## Getting started
+You need [Godot 4.7](https://godotengine.org/download). The game is built from many Dot addons, each in its own repository, so the easiest way to get everything is [dot-bootstrap](https://github.com/modcommunity/dot-bootstrap). It clones every project and links the addons into each one:
 
-Every number is a cvar or an environment variable, layered `defaults < JSON < environment < command line` like everything else in this family. The ones an operator wants between rounds are live and write through to the running world.
-
-```
-dr_round_seconds 240           // the most a round runs (a course may ask for less)
-dr_players_per_activator 8     // one activator for every eight players
-dr_max_activators 2            // and never more than two
-dr_activator_repeat 1          // last round's activator may be drawn again
-dr_timeout_winner 0            // a round the clock ends is a draw (1 runners, 2 activators)
-dr_activator_health 2          // activators twice as tough at the end
-dr_autobhop 1                  // holding jump hops again on landing
-dr_bot_trap_delay 0.5          // stand-in activators press half a second later
-dr_min_players 6               // keep six in the round with stand-ins
+```bash
+git clone https://github.com/modcommunity/dot-bootstrap.git
+cd dot-bootstrap
+./bootstrap.sh
+cd projects/mg-deathrun
+./game.sh
 ```
 
-`dr_course_ids` (on the command line or in the JSON file) limits a server to some courses. `dr_courses` lists what the server has and any document it refused, with the reason; `dr_traps` lists this course's traps and which are spent; `dr_reload` reads the course directory again for the next round; `dr_status` and `dr_net` say what the server is doing.
+On Windows, run `bootstrap.ps1` instead and open the project in Godot.
 
-A moderator has dot-moderation's live tools: `noclip`, `freeze`, `speed`, `gravity`, `god`, `buddha`, `hp`, `slay`, `slap`, `rename`, the teleports, `blind` and `beacon`, and `respawn`, which puts somebody back at the start of their side alive. `give` and `strip` are refused: the weapons are what the end hands out.
+The courses come from the mg-deathrun-maps checkout, which bootstrap links into `courses/` for you.
+
+`game.sh` does everything else:
+
+| Command | What it does |
+| --- | --- |
+| `./game.sh` | Play offline against bots (one of them works the traps when you run, and they run when you are the activator) |
+| `./game.sh online` | Start a local server and the browser client, and print the link to open |
+| `./game.sh online down` | Stop them |
+| `./game.sh server` | Start a local dedicated server only |
+| `./game.sh test` | Check every script and run every test suite |
+| `./game.sh shot` | Save a screenshot to `screenshots/`. `./game.sh shot --help` lists the views |
+| `./game.sh help` | All of the options |
+
+`online` and `server` use [dot-server-deploy](https://github.com/modcommunity/dot-server-deploy), which bootstrap clones next to this one. Run its `./setup.sh` once first.
+
+## Running a server
+Settings are cvars. Set them in the server's config, on the command line, or live from the console. Most of them take effect from the next round.
+
+```
+dr_round_seconds 300           // the longest a round runs (a course may ask for less)
+dr_players_per_activator 8     // one activator for every this many players
+dr_max_activators 6            // never more than this many
+dr_activator_repeat 0          // 1 = last round's activator may be drawn again
+dr_timeout_winner 2            // who wins when the clock runs out: 0 draw, 1 runners, 2 activators
+dr_activator_health 1.5        // how much tougher activators are at the end
+dr_autobhop 0                  // 1 = hold jump to keep hopping
+dr_bot_trap_delay 0.25         // how late bot activators press, in seconds
+dr_min_players 3               // fill the round with bots up to this
+dr_bots 1                      // 0 = no bots
+dr_vote_after 20               // seconds into a course before the vote for the next one opens
+```
+
+`--dr-course-ids=<ids>` limits a server to some courses. The vote's settings go in `user://cfg/deathrun_vote.json` (`{"enabled": false}` turns it off); dot-vote's README lists them.
+
+Console commands:
+
+| Command | |
+| --- | --- |
+| `dr_status` | What the server is doing |
+| `dr_courses` | The courses the server has, and any it refused (with the reason) |
+| `dr_traps` | This course's traps, and which are used up |
+| `dr_reload` | Read the course folder again, for the next round |
+| `dr_net` | What the network code is doing |
+
+### Admin commands
+These come from [dot-moderation](https://github.com/modcommunity/dot-moderation): `noclip`, `freeze`, `speed`, `gravity`, `god`, `buddha`, `hp`, `slay`, `slap`, `rename`, the teleports, `blind` and `beacon`. `respawn` puts somebody back at the start of their side. `give` and `strip` are turned off, because the weapons are what the end hands out.
 
 ## Writing a course
+A course is a JSON file: a start, a corridor of pieces and traps, a walkway with a button for every trap, a finish and an end arena. The courses are in [mg-deathrun-maps](https://github.com/gamemann/mg-deathrun-maps), whose `tools/build_courses.py` writes them section by section (so the corridor and the walkway always line up). That is also the easiest way to write a new one. [`courses/README.md`](courses/README.md) describes the format. The server sends the course to each player when the round starts, so players don't need the course files.
 
-A course is a JSON document — a start, a corridor of pieces and traps, a walkway with a button for every trap, a finish and an end arena — and a server reads every one in `courses/`. [`courses/README.md`](courses/README.md) is the format. The courses live in their own repository, [mg-deathrun-maps](https://github.com/gamemann/mg-deathrun-maps), linked here as `courses/` and delivered to a server as a pack of their own. They are generated by its `tools/build_courses.py`, which lays them out section by section so the corridor and the walkway beside it always agree; it is also the quickest way to write a new one. A server sends the course to each client as the round begins, so players need no course files at all.
+## Testing
 
-## What replicates, and what does not
+```bash
+./game.sh test                      # every script parses, then every suite runs
+./game.sh test headless_courses     # one suite
+```
 
-| | |
+| Suite | What it covers |
 | --- | --- |
-| A player's own movement | **Predicted**, and corrected |
-| Everybody else | Replicated and interpolated |
-| **The course** | **Sent once, as a document** |
-| **A trap** | **One event: which trap, and the tick it was pressed on.** Every part of every trap is worked out from that by each client on its own, so a runner standing on a trapdoor that opens is carried by their own prediction exactly as the server carries them |
-| A death | The server's decision, as an event |
-| Sides, the finish, the end | The server's decisions, as per-player state and events |
+| `headless_run` | The game itself: sides, traps, deaths, the end fight |
+| `headless_courses` | Every course: a bot runs it, every trap is sprung on somebody, every button is reached |
+| `headless_net` | A server and a client in one process, over the network code |
+| `dedicated` | A real server: boots, loads the game, runs its commands |
 
-## The art
+[`CLAUDE.md`](CLAUDE.md) has the design decisions and the reasoning behind them.
 
-Every surface is [Kenney's](https://kenney.nl) **Prototype Textures**, tinted per course. The players are Kenney's Blocky Characters and the weapons are [zee-dot-weapons](https://github.com/gamemann/zee-dot-weapons)' own. All of it is **CC0**. Spikes, blades, fire and pools are drawn from primitives in code.
+## Not done yet
+- Traps give no warning before they go off.
+- Every trap makes the same sound.
+- The bots are simple: a bot runner follows the course and ignores the activator, and a bot activator presses the trap the nearest runner is in.
+- There is no settings menu.
 
-## What does not work yet
+## Credits
+Every surface is Kenney's Prototype Textures, tinted per course, and the players are Kenney's Blocky Characters ([kenney.nl](https://kenney.nl), CC0). The weapons are from [zee-dot-weapons](https://github.com/gamemann/zee-dot-weapons). Spikes, blades, fire and pools are drawn in code. Each kit's licence is next to its files.
 
-- **No trap gives a warning.** Every trap goes the tick its button is pressed; a shake or a glow before it goes is the next thing to add.
-- **The machinery makes one noise.** A trap going off is one synthesised impact, whatever it is.
-- **Stand-ins are simple.** A stand-in runner follows the course's route and does not watch the activator; a stand-in activator presses the trap the nearest runner is in.
-- **No settings screen**, for the reason mg-smash-copter gives: there is no menu to put one in.
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
-
-The art is the exception, and it is a more permissive one: the prototype textures, the characters and the weapon models are CC0 1.0, public domain with no attribution required. Each kit's own licence text ships unchanged beside the files it covers.
-
-## Voting for the next course
-
-Part way into every course the players vote for the next one (`!vote 2`, `!rtv`, `!nominate dr_foundry`), and the next round plays the winner. A server owner configures it in `user://cfg/deathrun_vote.json`, keyed as dot-vote's `DotVoteRules`; `{"enabled": false}` turns it off. `dr_vote_after` is how many seconds into a course the ballot opens.
+## License
+MIT. See [LICENSE](LICENSE). The Kenney art is CC0, which is public domain.
