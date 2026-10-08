@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 8
-const CHECKS := 34
+const CHECKS := 39
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -257,6 +257,23 @@ func _test_the_course_vote() -> void:
 
 	_check(server.console.find_command("vote") != null if server.console.has_method("find_command") else true,
 		"and registered dot-vote's vote command")
+
+	# Hibernation: DotGameModule hands the director the server, the ballot's timer waits with
+	# it, and waking starts both again from the top.
+	var sleeper: DotVoteDirector = vote.get("director")
+	_check(server.hibernation_changed.is_connected(sleeper.set_hibernating),
+		"the vote follows the server's hibernation without a line of this game's")
+	vote.set("_opened_this_course", true)
+	server.console.execute("sv_hibernate_when_empty 1")
+	_check(server.is_hibernating() and sleeper.hibernating, "an empty server sleeps, and the vote with it",
+		server.state_name())
+	var on_course: float = vote.get("_on_course_sec")
+	vote.call("advance", 600.0)
+	_check(is_equal_approx(vote.get("_on_course_sec"), on_course), "ten minutes asleep do not count towards the ballot")
+	server.console.execute("sv_hibernate_when_empty 0")
+	_check(not sleeper.hibernating, "waking wakes the vote")
+	_check(is_zero_approx(vote.get("_on_course_sec")) and not vote.get("_opened_this_course"),
+		"and the course ballot is owed again from the top")
 
 	# Every course in the directory, not only this suite's practice course.
 	game.config.course_ids = PackedStringArray()

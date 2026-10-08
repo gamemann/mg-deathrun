@@ -187,6 +187,15 @@ func note_course(id: StringName) -> void:
 	_opened_this_course = false
 
 
+## The server woke from hibernation: the course ballot is owed again, from the top.
+##
+## The director restarts itself ([member DotVoteRules.wake_restart]); this is the half that is
+## this game's — the seconds into the course at which the ballot opens.
+func note_woke() -> void:
+	_on_course_sec = 0.0
+	_opened_this_course = false
+
+
 ## A round ended: a decided course is applied now, so the next round starts on it.
 func note_round_end() -> void:
 	if director != null:
@@ -202,6 +211,13 @@ func advance(delta: float) -> void:
 
 	if feed != null:
 		feed.poll()
+
+	# The ballot's own timer waits with the director's clock while the server hibernates
+	# (DotGameModule hands the director the server's hibernation). Counted on, it ran past
+	# open_after_sec over an empty room, the ballot was refused for want of voters, and the
+	# first player in never got one on this course.
+	if director.hibernating:
+		return
 
 	_on_course_sec += delta
 

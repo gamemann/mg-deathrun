@@ -368,6 +368,13 @@ func _game_unload() -> void:
 		vote = null
 
 
+## The server slept or woke. The vote's director follows it on its own (DotGameModule finds
+## it); the course ballot's timer is this game's, so it starts again here on waking.
+func _game_hibernation(hibernating: bool) -> void:
+	if not hibernating and vote != null:
+		vote.note_woke()
+
+
 ## Keeps enough people in the round for there to be one.
 ##
 ## [b]An activator and a runner, or nothing happens at all.[/b] A round ends the moment a side
