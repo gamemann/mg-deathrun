@@ -48,7 +48,7 @@ cd projects/mg-deathrun
 
 On Windows, run `bootstrap.ps1` instead and open the project in Godot.
 
-The courses come from the mg-deathrun-maps checkout, which bootstrap links into `courses/` for you.
+The courses come from the mg-deathrun-maps checkout, which bootstrap links into `courses/` for you. On a deployed server they come from the server instead: the game ships only its built-in practice course, and the server owner picks the courses pack (`gamemann/mg-deathrun-maps`, or their own) in dot-server-deploy's `cfg/content.yml`.
 
 `game.sh` does everything else:
 

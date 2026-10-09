@@ -25,11 +25,10 @@ scene: scenes/dr_server.tscn
 client_scene: game/dr.tscn
 module: game/dr_module.gd
 
-# The courses are their own pack, mounted on the server alone: a server sends the one it is
-# playing to each client as a document, so a client never needs a course file. A new course
-# is a release of mg-deathrun-maps and nothing else. See CLAUDE.md.
-server_dependencies:
-  - gamemann/mg-deathrun-maps
+# No maps pack is named here. Which courses a server runs is the server owner's choice, made in
+# their deployment's map config (dot-server-deploy's cfg/content.yml, gamemann/mg-deathrun-maps
+# for the stock set); the module fetches what the server names. This game's own pack ships
+# only its built-in the practice course.
 
 cvars:
   dr_round_seconds: "300"

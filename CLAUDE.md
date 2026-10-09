@@ -106,7 +106,7 @@ tools/shot.sh --view=trap --trap=ice_jaws --after=0.25 --dr-course-ids=dr_ice_wo
 
 ## Delivery
 
-The courses are their own repository and pack, [mg-deathrun-maps](../mg-deathrun-maps), split out on 2026-10-06 the way mg-wipeout's were: `courses/` here is a dot-bootstrap link (`.gitignore` names it), `game.yml` names `gamemann/mg-deathrun-maps` under `server_dependencies`, and `DrModule._add_delivered_courses` adds that mount's `courses/` to the catalogue. It is never in a client's content sync. A new course reaches servers by a release there and nothing else.
+The courses are their own repository and pack, [mg-deathrun-maps](../mg-deathrun-maps), split out on 2026-10-06 the way mg-wipeout's were: `courses/` here is a dot-bootstrap link (`.gitignore` names it), and `game.yml` does not name the pack: the server owner names `gamemann/mg-deathrun-maps` (or their own) in their deployment's map config (dot-server-deploy's `cfg/content.yml`, which fills `DotGameDescriptor.maps`). `DrModule._add_delivered_courses` asks dot-game's `DotGameContent.map_dirs(server, "courses")` for every pack the server names, fetched through dot-cloud, and adds each mount's `courses/` to the catalogue at load and again after every `dr_reload` (which used to drop them, because `load_from` forgets everything). The game's own pack carries only `dr_practice`. It is never in a client's content sync. A new course reaches servers by a release there and nothing else.
 
 ## Choosing a side, unseen activators, points and the Tab board (2026-10-06)
 
