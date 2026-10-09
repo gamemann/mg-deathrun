@@ -24,7 +24,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
 const SECTIONS := 9
-const CHECKS := 39
+const CHECKS := 40
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -365,6 +365,23 @@ func _test_the_end_crosses() -> void:
 	_check(_mine().finished and _mine().at_end, "the client's player is across and at the end")
 	_check(_heard.has("armed_%d" % SESSION), "and was told what it was handed", str(_heard.get("armed_%d" % SESSION)))
 	_check(_client_game.phase == DrGame.Phase.SHOWDOWN, "the client knows the activators were called")
+
+	# The gun in their hand, as somebody else draws it: the client's copy of this player,
+	# drawn as a watcher would (not its own first-person view), holds what the server handed.
+	var held_def := server_me.weapons.arsenal.current_def() if server_me.weapons != null else null
+	var copy := _mine()
+	var _shown := copy.present_body(false, copy.global_position, Color.WHITE)
+	var hand := copy.figure.attachment(&"right_hand") if copy.figure != null else null
+	_check(
+		held_def != null and copy.figure != null and copy.figure.holding == held_def.id
+			and copy.figure.held != null and copy.figure.held.equipped() == held_def.id
+			and hand != null and String(hand.get_parent().name) == "arm-right",
+		"a watcher draws the weapon in their right hand",
+		"%s drawn, %s held, dealt %s" % [
+			String(copy.figure.holding) if copy.figure != null else "-",
+			String(held_def.id) if held_def != null else "-", str(copy.dealt)
+		]
+	)
 
 	await _steps(int(_server_game.config.arrival_grace_seconds * SERVER_TICK_RATE) + 4)
 	var damage := DotDamage.make(server_me.entity_id, _stand_in.entity_id, 1000.0, null)

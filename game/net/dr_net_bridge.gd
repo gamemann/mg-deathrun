@@ -1062,6 +1062,12 @@ func _on_event(message: DotNetMessage) -> void:
 			var armed := DrEvents.read_armed(reader)
 
 			if bool(armed["ok"]):
+				# Noted on the player here rather than by whoever listens, so every client
+				# draws the gun in a watched player's hand: see `DrPlayer.dealt`.
+				var dealt_to: DrPlayer = game.players.get(player_key(int(armed["player_id"]))) \
+					if game != null else null
+				if dealt_to != null:
+					dealt_to.note_dealt(armed["weapon_id"], game.round_number)
 				armed_received.emit(int(armed["player_id"]), armed["weapon_id"])
 		DrEvents.Kind.CHAT:
 			var wire := DrEvents.read_chat(reader)

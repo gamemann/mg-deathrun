@@ -8,6 +8,7 @@
 #   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5      # a trap, mid-run, on somebody
 #   tools/shot.sh --view=third --seconds=8             # third person, on the course
 #   tools/shot.sh --view=end                           # the end arena, from a runner who made it
+#   tools/shot.sh --view=end --end-wait=5              # ...once the weapon they were handed is out
 #   tools/shot.sh --view=course --out=res://screenshots/x.png  # any --dr-* is the game's config
 #
 # xvfb-run because this needs a rendering context and the machines this runs on have no
@@ -31,7 +32,7 @@ for arg in "$@"; do
         --seconds=*) seconds="${arg#*=}" ;;
         --out=*)     out="${arg#*=}" ;;
         --dr-*)      config+=("$arg") ;;
-        --trap=*|--after=*) config+=("$arg") ;;
+        --trap=*|--after=*|--end-wait=*) config+=("$arg") ;;
         *)           echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done

@@ -30,7 +30,7 @@ game/
   dr_vote.gd         the players' vote for the next course, over dot-vote
   net/               the codec (STAGE, TEAM, TRAP, FINISHED…), the link, the player behaviour, the bridge
 courses/             link to ../mg-deathrun-maps/courses (generated there); README.md is the format
-examples/            headless_run (92), headless_courses (every course played), headless_net (39), dedicated (34)
+examples/            headless_run (92), headless_courses (every course played), headless_net (40), dedicated (39)
 tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes
 ```
 
@@ -87,7 +87,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/*' | while read
     godot --headless --path . --check-only --script "res://${f#./}"; done
 godot --headless --path . res://examples/headless_run.tscn       # 22 sections, 92 checks
 godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
-godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 39 checks
+godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 40 checks
 godot --headless --path . res://examples/dedicated.tscn          # 8 sections, 34 checks, and the exit probe
 ../mg-deathrun-maps/tools/build_courses.py --check               # the courses are what the builder writes
 godot --headless --path . res://tools/trace_run.tscn -- --course=dr_ice_works --every=0.25
@@ -128,9 +128,15 @@ mg-deathrun-maps' `hops` section: small platforms over a pit, side to side, 2.4 
 
 A trap sounds like its machine (`DrAudio.trap_sound`): a part that spins is a saw's whine, fire is a burner's roar, a part that turns or a floor that moves away is a trapdoor's bang, spikes that close sideways grind, spikes that travel up or down are a heavy thud, and anything else is the old impact. Told from the parts because a trap is parts and not a kind; a mapper who wants otherwise writes `"sound"` on the trap (`DrCourseDoc.TRAP_SOUNDS`). The five are synthesised in `dr_audio.gd` into dot-audio's bank under the id and the path a real file would have, so an `.ogg` in `audio/` still wins. `headless_courses` checks the known traps' machines; `tools/audio_probe` (xvfb only) plays all five under ALSA.
 
+## A gun in somebody else's hand (2026-10-08)
+
+mg-smash-copter's watcher figures, ported as they are (`DrFigure` is still that file renamed): a `ZeeWorldModel` at the end of the kit's own `arm-right`, the arm held up over the walk cycle, and what is in it read off the rig for a player this process simulates and off the snapshot's slot among the weapons the server ANNOUNCED for one it mirrors (`DrPlayer.dealt`, noted by the bridge as each `ARMED` arrives — this game already announces every weapon it gives). The hand draws the flash and the tracer; the report stays `DrAudio`'s. `headless_net`'s "the end crosses" checks the client's copy of the finisher, drawn as a watcher draws it, holds the server's weapon at the end of `arm-right` (40 checks). See mg-smash-copter's CLAUDE.md for the reasoning.
+
+**Rendering the end found that nobody's switch ever finished.** `tools/shot.sh --view=end` drew a runner holding the spade — the first slot the client's view rig was given — under "You were handed a marksman", for as long as it was left. The client (and this game's server, `weapon_command_for`) send the wanted slot on every tick, and dot-weapon's `select()` restarted a switch on each repeat, so the holster's deadline moved a tick further every tick. Fixed in dot-weapon (4d543f7), where it was every game's; a delivered pack needs a shell built after it. `--end-wait=N` waits longer at the end, so the deploy is over by the frame.
+
 ## Still to do
 
 In the order they are worth doing.
 
 1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. dot-server-deploy has `content/deathrun/` and `content/deathrun_maps/` and `examples/deathrun_client` (19 checks, 2026-10-06): the delivered pack boots, a real client joins over a real socket, the courses are mounted where `_add_delivered_courses` looks, and the client builds the server's course and traps from the document. What is left is the owner's: the repositories, the release order, publishing.
-2. **A world model in a watcher's hands**, as mg-smash-copter's list says.
+2. **The client never drives its view model's sway** (`ZeeWeaponRig.drive_view`, which game-arena calls every frame), so the gun in a runner's hands does not bob or lag a turn.

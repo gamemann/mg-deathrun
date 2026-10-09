@@ -17,6 +17,9 @@ const DrGame := preload("../game/dr_game.gd")
 
 var _view := "eyes"
 var _seconds := 4.0
+
+## How long `--view=end` waits after arriving; `--end-wait=N`.
+var _end_wait := 1.5
 var _out := "res://screenshots/shot.png"
 var _trap := ""
 var _after := 0.5
@@ -27,6 +30,8 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--view="):
 			_view = arg.trim_prefix("--view=")
+		elif arg.begins_with("--end-wait="):
+			_end_wait = arg.trim_prefix("--end-wait=").to_float()
 		elif arg.begins_with("--seconds="):
 			_seconds = arg.trim_prefix("--seconds=").to_float()
 		elif arg.begins_with("--out="):
@@ -115,7 +120,9 @@ func _run() -> void:
 		"end":
 			await _seconds_of(game.config.countdown_seconds + 0.5)
 			local.place_at(game.course_doc["finish"]["at"], 0.0)
-			await _seconds_of(1.5)
+			# `--end-wait=N` waits longer at the end: the weapon is handed over on arrival and
+			# its deploy is still running at 1.5 s.
+			await _seconds_of(maxf(1.5, _end_wait))
 		_:
 			await _seconds_of(_seconds)
 
