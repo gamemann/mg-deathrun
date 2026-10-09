@@ -143,4 +143,3 @@ mg-smash-copter's watcher figures, ported as they are (`DrFigure` is still that 
 In the order they are worth doing.
 
 1. **Put it live.** The remote is `git@github.com:gamemann/mg-deathrun.git`; the repository has not been created on GitHub or pushed. dot-server-deploy has `content/deathrun/` and `content/deathrun_maps/` and `examples/deathrun_client` (19 checks, 2026-10-06): the delivered pack boots, a real client joins over a real socket, the courses are mounted where `_add_delivered_courses` looks, and the client builds the server's course and traps from the document. What is left is the owner's: the repositories, the release order, publishing.
-2. **The client never drives its view model's sway** (`ZeeWeaponRig.drive_view`, which game-arena calls every frame), so the gun in a runner's hands does not bob or lag a turn.
