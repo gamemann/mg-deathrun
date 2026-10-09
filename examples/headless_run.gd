@@ -19,9 +19,9 @@ const DrProgress := preload("../game/dr_progress.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 22
+const SECTIONS := 23
 
-const CHECKS := 92
+const CHECKS := 94
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -66,6 +66,7 @@ func _run() -> void:
 	await _test_a_bot_at_the_buttons()
 	await _test_progress()
 	await _test_side_choice()
+	await _test_the_client_settings()
 
 	for world in _worlds.duplicate():
 		await _dispose(world)
@@ -826,6 +827,39 @@ func _hold_for(game: DrGame, player: DrPlayer, move: Vector2, yaw: float, ticks:
 		command.yaw = yaw
 		player.controller.apply_command(command)
 		await _step(game, 1)
+
+
+## A real offline client, booted: its settings are built and read by its sampler and its
+## camera, and Escape opens the screen. Escape used to let go of the mouse and offer nothing.
+func _test_the_client_settings() -> void:
+	_section("the client's settings are read, and Escape opens them")
+	var client: Node = (load("res://game/dr_client.gd") as GDScript).new()
+	client.set(&"force_offline", true)
+	client.set(&"config_file", "user://cfg/headless-none.json")
+	add_child(client)
+
+	for i in 6:
+		await get_tree().process_frame
+
+	var settings: Variant = client.get("settings")
+	var camera: Camera3D = client.get("camera")
+	_check(
+		settings != null and int(settings.describe().get("look_bound", 0)) > 0 \
+			and camera != null and bool(settings.describe().get("camera_bound", false)) \
+			and is_equal_approx(camera.fov, float(settings.settings.get_int(&"field_of_view", 0))),
+		"the client's settings are read by its sampler and its camera",
+		str(settings.describe()) if settings != null else "no settings"
+	)
+	var escape := InputEventAction.new()
+	escape.action = &"ui_cancel"
+	escape.pressed = true
+	client.call("_unhandled_input", escape)
+	_check(settings != null and settings.is_open(), "and Escape opens them")
+
+	remove_child(client)
+	client.free()
+	await get_tree().process_frame
+	_finished()
 
 
 func _section(name: String) -> void:

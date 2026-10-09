@@ -30,7 +30,7 @@ game/
   dr_vote.gd         the players' vote for the next course, over dot-vote
   net/               the codec (STAGE, TEAM, TRAP, FINISHED…), the link, the player behaviour, the bridge
 courses/             link to ../mg-deathrun-maps/courses (generated there); README.md is the format
-examples/            headless_run (92), headless_courses (every course played), headless_net (40), dedicated (39)
+examples/            headless_run (94), headless_courses (every course played), headless_net (40), dedicated (39)
 tools/               shot.sh/.gd — render a view; trace_run — where a stand-in runner goes
 ```
 
@@ -85,7 +85,7 @@ A trapdoor kills nobody; the spikes under it do. So `_watch_course` remembers th
 godot --headless --path . --import
 find . -name '*.gd' -not -path './.godot/*' -not -path './addons/*' | while read f; do
     godot --headless --path . --check-only --script "res://${f#./}"; done
-godot --headless --path . res://examples/headless_run.tscn       # 22 sections, 92 checks
+godot --headless --path . res://examples/headless_run.tscn       # 23 sections, 94 checks
 godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
 godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 40 checks
 godot --headless --path . res://examples/dedicated.tscn          # 8 sections, 34 checks, and the exit probe
@@ -133,6 +133,10 @@ A trap sounds like its machine (`DrAudio.trap_sound`): a part that spins is a sa
 mg-smash-copter's watcher figures, ported as they are (`DrFigure` is still that file renamed): a `ZeeWorldModel` at the end of the kit's own `arm-right`, the arm held up over the walk cycle, and what is in it read off the rig for a player this process simulates and off the snapshot's slot among the weapons the server ANNOUNCED for one it mirrors (`DrPlayer.dealt`, noted by the bridge as each `ARMED` arrives — this game already announces every weapon it gives). The hand draws the flash and the tracer; the report stays `DrAudio`'s. `headless_net`'s "the end crosses" checks the client's copy of the finisher, drawn as a watcher draws it, holds the server's weapon at the end of `arm-right` (40 checks). See mg-smash-copter's CLAUDE.md for the reasoning.
 
 **Rendering the end found that nobody's switch ever finished.** `tools/shot.sh --view=end` drew a runner holding the spade — the first slot the client's view rig was given — under "You were handed a marksman", for as long as it was left. The client (and this game's server, `weapon_command_for`) send the wanted slot on every tick, and dot-weapon's `select()` restarted a switch on each repeat, so the holster's deadline moved a tick further every tick. Fixed in dot-weapon (4d543f7), where it was every game's; a delivered pack needs a shell built after it. `--end-wait=N` waits longer at the end, so the deploy is over by the frame.
+
+## Settings, and Escape opens them (2026-10-08)
+
+`DrSettings` is mg-buses-from-hell's `BfhSettings` renamed: sensitivity (ACCOUNT, the family's 0.022 degrees per unit), field of view (SERVER_CLAMPED, default the 92 the camera always had) and three volumes on dot-audio's mixer, applied after load and bound to the sampler, the camera and the mixer. Escape, which only let go of the mouse, now opens dot-ui's `DotSettingsScreen` too, and walking is suspended while it is up, as while typing. dot-settings is newly linked (`.gitignore`; the shell already vendors it). `headless_run`'s "the client's settings are read" boots a real offline client and checks both, and Escape; rendered with the screen open over a course.
 
 ## Still to do
 
