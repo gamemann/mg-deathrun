@@ -384,6 +384,12 @@ static func _trap(source: Variant, index: int) -> DotResult:
 	if trap.has("victim"):
 		out["victim"] = _v3(trap["victim"])
 
+	# And where a runner stands to be MISSED by it: a trap that is dodged rather than jumped
+	# (a swinging blade misses the walls) is only half tested by its victim, and a blade that
+	# swept the whole corridor would pass that half. Read by nothing in a round either.
+	if trap.has("spared"):
+		out["spared"] = _v3(trap["spared"])
+
 	var zone: Variant = trap.get("zone")
 
 	if typeof(zone) == TYPE_DICTIONARY and (zone as Dictionary).has("at"):

@@ -55,10 +55,13 @@ func _run() -> void:
 	_finished()
 
 	var traps := 0
+	var spared := 0
 
 	for id: StringName in courses:
 		var doc: Dictionary = catalogue.courses[id]
 		traps += (doc["traps"] as Array).size()
+		for trap: Dictionary in doc["traps"]:
+			spared += 1 if trap.has("spared") else 0
 		await _run_course(doc)
 		await _spring_every_trap(doc)
 		await _walk_to_every_button(doc)
@@ -69,7 +72,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 4
-	var checks := 2 + courses.size() * (2 + 1 + 2) + traps
+	var checks := 2 + courses.size() * (2 + 1 + 2) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -155,8 +158,9 @@ func _spring_every_trap(doc: Dictionary) -> void:
 	var game := await _fresh(doc)
 	var victim := game.add_player(&"u1", "Victim")
 	var spare := game.add_player(&"u2", "Spare")
+	var dodger := game.add_player(&"u4", "Dodger")
 	var activator := game.add_player(&"u3", "Activator")
-	await _begin(game, [victim, spare], [activator])
+	await _begin(game, [victim, spare, dodger], [activator])
 	await _ticks(game, int((game.config.countdown_seconds + 0.2) * TICK_RATE))
 
 	for index in range(game.stage.trap_count()):
@@ -172,12 +176,21 @@ func _spring_every_trap(doc: Dictionary) -> void:
 		victim.place_at((spec["victim"] as Vector3) + Vector3(0.0, 0.1, 0.0), 0.0)
 		# The spare stays at the start, alive, so one death does not end the round.
 		spare.place_at(game.stage.start_spot(0, 1)[0], 0.0)
+		# A trap with a `spared` spot has somebody there too, who has to come through it; one
+		# without parks them at the start beside the spare.
+		_revive(game, dodger)
+		var dodges := spec.has("spared")
+		dodger.place_at(((spec["spared"] as Vector3) + Vector3(0.0, 0.1, 0.0)) if dodges \
+			else game.stage.start_spot(0, 1)[0] + Vector3(1.0, 0.0, 0.0), 0.0)
 		await _ticks(game, TICK_RATE / 2)
 		var stood := victim.is_alive()
 		var pressed := game.press(index, activator.player_id)
 		await _ticks(game, TICK_RATE * 3)
 		_check(stood and pressed and not victim.is_alive(), name,
 			"stood %s, pressed %s, then at %s" % [stood, pressed, victim.controller.state.position])
+		if dodges:
+			_check(dodger.is_alive(), name + ", and misses whoever stands clear of it",
+				"spared spot %s, then at %s" % [spec["spared"], dodger.controller.state.position])
 
 	_finished()
 

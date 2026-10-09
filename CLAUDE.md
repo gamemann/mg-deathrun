@@ -86,7 +86,7 @@ godot --headless --path . --import
 find . -name '*.gd' -not -path './.godot/*' -not -path './addons/*' | while read f; do
     godot --headless --path . --check-only --script "res://${f#./}"; done
 godot --headless --path . res://examples/headless_run.tscn       # 23 sections, 94 checks
-godot --headless --path . res://examples/headless_courses.tscn   # every course played (40 checks today)
+godot --headless --path . res://examples/headless_courses.tscn   # every course played (57 checks with The Temple)
 godot --headless --path . res://examples/headless_net.tscn       # 9 sections, 40 checks
 godot --headless --path . res://examples/dedicated.tscn          # 8 sections, 34 checks, and the exit probe
 ../mg-deathrun-maps/tools/build_courses.py --check               # the courses are what the builder writes
@@ -137,6 +137,10 @@ mg-smash-copter's watcher figures, ported as they are (`DrFigure` is still that 
 ## Settings, and Escape opens them (2026-10-08)
 
 `DrSettings` is mg-buses-from-hell's `BfhSettings` renamed: sensitivity (ACCOUNT, the family's 0.022 degrees per unit), field of view (SERVER_CLAMPED, default the 92 the camera always had) and three volumes on dot-audio's mixer, applied after load and bound to the sampler, the camera and the mixer. Escape, which only let go of the mouse, now opens dot-ui's `DotSettingsScreen` too, and walking is suspended while it is up, as while typing. dot-settings is newly linked (`.gitignore`; the shell already vendors it). `headless_run`'s "the client's settings are read" boots a real offline client and checks both, and Escape; rendered with the screen open over a course.
+
+## A trap may be spared, as well as sprung (2026-10-08)
+
+A trap document may name a `spared` spot beside its `victim` (`DrCourseDoc` carries it through; nothing in a round reads it), for a trap that is dodged rather than jumped: mg-deathrun-maps' new `swing` blade kills the corridor's middle and passes over the walls. `headless_courses` stands a third runner on every `spared` spot and fails the trap if they die, and counts those checks into its total; it found the first blade's geometry wrong the first time it ran (mg-deathrun-maps' CLAUDE.md has the arithmetic). Courses: practice, Ice Works, The Foundry and The Temple (57 checks).
 
 ## Still to do
 
