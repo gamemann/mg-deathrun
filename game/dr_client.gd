@@ -61,8 +61,11 @@ var player: DrPlayer = null
 var camera: Camera3D = null
 var hud: DrHud = null
 
-## The Tab board. See [method board_rows].
-var board: DotScoreboardScreen = null
+## The Tab board, the menu's. See [method _wire_board].
+var board: DotMenuScoreboard = null
+
+## When this client started, for an offline board's "time".
+var _started_msec: int = Time.get_ticks_msec()
 var chat: DrClientChat = null
 
 ## What the game sounds like. See [DrAudio].
@@ -481,17 +484,24 @@ func _build_settings() -> void:
 	if audio != null:
 		settings.bind_audio(audio.manager)
 
-	if settings.stack != null:
+	if settings.menu != null:
 		# [b]Walking is off while the menu is up, as it is while typing.[/b] The sampler
 		# polls the keyboard, and a player dragging a volume slider with the arrow keys
 		# would otherwise walk off whatever they had stopped on.
-		settings.stack.menu_state_changed.connect(func(any_open: bool) -> void:
+		settings.menu_state_changed.connect(func(any_open: bool) -> void:
 			_suspend_input(any_open or (chat != null and chat.is_typing()))
-			# Back into the game on desktop. A browser needs the click that follows, which
-			# `_unhandled_input` already turns into a capture.
-			if not any_open and not DotPlatform.is_web():
+			# The menu takes Escape itself now, so the pointer is freed here rather than
+			# by the key. Back into the game on desktop on close; a browser needs the
+			# click that follows, which `_unhandled_input` already turns into a capture.
+			if any_open:
+				_release()
+			elif not DotPlatform.is_web():
 				_capture()
 		)
+		# Typing a line is the chat box's keyboard: Escape there closes the line, not
+		# opens the menu.
+		settings.menu.busy = func() -> bool: return chat != null and chat.is_typing()
+		_wire_board()
 
 
 func _build_audio() -> void:
@@ -762,57 +772,88 @@ func _build_hud() -> void:
 	hud.name = "Hud"
 	add_child(hud)
 
-	# dot-ui's scoreboard, this game's columns: a swatch, the name, the side, points, ping.
-	board = DotScoreboardScreen.new()
-	board.name = "Board"
+
+
+## The Tab board: dot-menu's, with this game's columns. Built once the menu exists (see
+## [method _build_settings]).
+##
+## [b]Online it is the server's roster with this game's numbers merged in.[/b] Names, pings
+## and how long each player has been on come from dot-server, which is the only thing that
+## knows them for everybody; points, the face and the side are already replicated here, so
+## they are joined in by id rather than sent twice. The two sides are the board's teams, the
+## runners first. Offline there is no server and the board is [method board_snapshot].
+func _wire_board() -> void:
+	if settings == null or settings.menu == null:
+		return
+	board = settings.menu.scoreboard
 	board.title_text = "Deathrun"
 	board.columns = [
-		{"key": &"avatar", "kind": &"icon", "width": 0.0, "size": 30.0},
+		{"key": &"avatar", "kind": DotMenuScoreboard.KIND_AVATAR, "width": 0.0},
 		{"key": &"name", "title": "Player", "width": 3.0},
-		{"key": &"side", "title": "Side", "width": 1.4},
-		{"key": &"points", "title": "Points", "align": HORIZONTAL_ALIGNMENT_RIGHT},
-		{"key": &"ping", "title": "Ping", "align": HORIZONTAL_ALIGNMENT_RIGHT},
+		{"key": &"points", "title": "Points", "kind": DotMenuScoreboard.KIND_NUMBER},
+		{"key": &"seconds", "title": "Time", "kind": DotMenuScoreboard.KIND_DURATION},
+		{"key": &"ping", "title": "Ping", "kind": DotMenuScoreboard.KIND_PING},
 	]
-	board.row_fn = board_rows
-	board.visible = false
-	board.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hud.add_child(board)
+	board.sort_by = &"points"
+	board.decorate = _decorate_row
+	board.prepare = _prepare_board
+	if not _offline and link != null:
+		board.feed_from(link)
+	else:
+		board.source = board_snapshot
 
 
 func _show_board(on: bool) -> void:
 	if board == null:
 		return
-	board.visible = on
 	if on:
-		board.title_text = "Deathrun  -  %s" % str(game.course_doc.get("name", "")) if game != null else "Deathrun"
-		board.refresh()
+		board.open()
+	else:
+		board.close()
 
 
-## The rows: best points first. Public so a suite can read them.
-func board_rows() -> Array:
-	var rows: Array = []
+## This game's numbers onto a row of the server's roster, by id.
+func _decorate_row(row: Dictionary) -> void:
 	if game == null:
-		return rows
-	var ids := game.players.keys()
-	ids.sort_custom(func(a: StringName, b: StringName) -> bool:
-		var pa: DrPlayer = game.players[a]
-		var pb: DrPlayer = game.players[b]
-		if pa.points != pb.points:
-			return pa.points > pb.points
-		return String(a) < String(b)
-	)
-	for id in ids:
-		var who: DrPlayer = game.players[id]
-		var side := game.team_of(id)
-		rows.append({
-			&"avatar": _face(who),
-			&"name": who.display_name,
-			&"side": "Activator" if side == DrGame.ACTIVATORS else ("Runner" if side == DrGame.RUNNERS else "-"),
-			&"points": who.points,
-			&"ping": (str(who.ping_ms) if who.ping_ms >= 0 else "-"),
-			"highlight": who == player,
-		})
-	return rows
+		return
+	var id := DrNetBridge.player_key(int(row.get("id", 0)))
+	if not game.players.has(id):
+		id = StringName(str(row.get("id", "")))
+	var who: DrPlayer = game.players.get(id)
+	if who == null:
+		return
+	row["avatar"] = _face(who)
+	row["points"] = who.points
+	row["team"] = game.team_of(id)
+	if int(row.get("ping", -1)) < 0 and who.ping_ms >= 0:
+		row["ping"] = who.ping_ms
+	if who == player:
+		row["you"] = true
+
+
+## The course in the header, and the two sides as the teams.
+func _prepare_board(snap: Dictionary) -> void:
+	if game == null:
+		return
+	snap["header"] = {"Course": str(game.course_doc.get("name", ""))}
+	snap["teams"] = [
+		{"id": DrGame.RUNNERS, "name": game.side_name(DrGame.RUNNERS), "color": game.side_colour(DrGame.RUNNERS)},
+		{"id": DrGame.ACTIVATORS, "name": game.side_name(DrGame.ACTIVATORS), "color": game.side_colour(DrGame.ACTIVATORS)},
+	]
+
+
+## The board offline: every player in the local world. Public so a suite can read it.
+func board_snapshot() -> Dictionary:
+	var players: Array = []
+	if game != null:
+		for id in game.players:
+			var who: DrPlayer = game.players[id]
+			players.append({"id": String(id), "name": who.display_name, "seconds": _seconds_here(), "ping": -1, "bot": who.is_bot})
+	return {"server": {"name": "Deathrun", "game": "offline"}, "players": players}
+
+
+func _seconds_here() -> int:
+	return int((Time.get_ticks_msec() - _started_msec) / 1000)
 
 
 ## The player's face for the board: their figure's head, rendered once per skin.
