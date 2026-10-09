@@ -1,6 +1,7 @@
 extends Node
 
 const DrAudio := preload("dr_audio.gd")
+const DrFigure := preload("dr_figure.gd")
 const DrSettings := preload("dr_settings.gd")
 const DrClientChat := preload("dr_client_chat.gd")
 const DrNetBridge := preload("net/dr_net_bridge.gd")
@@ -766,7 +767,7 @@ func _build_hud() -> void:
 	board.name = "Board"
 	board.title_text = "Deathrun"
 	board.columns = [
-		{"key": &"avatar", "kind": &"icon", "width": 0.0, "size": 22.0},
+		{"key": &"avatar", "kind": &"icon", "width": 0.0, "size": 30.0},
 		{"key": &"name", "title": "Player", "width": 3.0},
 		{"key": &"side", "title": "Side", "width": 1.4},
 		{"key": &"points", "title": "Points", "align": HORIZONTAL_ALIGNMENT_RIGHT},
@@ -804,7 +805,7 @@ func board_rows() -> Array:
 		var who: DrPlayer = game.players[id]
 		var side := game.team_of(id)
 		rows.append({
-			&"avatar": _swatch(who),
+			&"avatar": _face(who),
 			&"name": who.display_name,
 			&"side": "Activator" if side == DrGame.ACTIVATORS else ("Runner" if side == DrGame.RUNNERS else "-"),
 			&"points": who.points,
@@ -814,18 +815,49 @@ func board_rows() -> Array:
 	return rows
 
 
-var _swatches: Dictionary = {}
+## The player's face for the board: their figure's head, rendered once per skin.
+##
+## [b]Per skin, not per player, because that is what differs.[/b] Every Blocky Character is
+## the same mesh and the six people `DrFigure` can draw are six atlases, so six portraits
+## cover every player there will ever be; the side is a torso tint and does not reach the
+## head. Each is a 64-pixel SubViewport with its own world, an unshaded figure and a camera
+## at its eyes, rendered once and kept: the board asks every frame it is open, and a render
+## per ask would be a viewport per player per frame for a picture that never changes.
+##
+## Until 2026-10-08 this was a square in a colour hashed from the id, which is what the brief
+## meant by "their avatar picture" only in the sense that it was in the right column.
+var _portraits: Dictionary = {}
 
-## A square in the player's own colour, standing in for an avatar picture. Spread by the
-## golden ratio, because Godot's string hash is near-sequential for similar ids.
-func _swatch(who: DrPlayer) -> Texture2D:
-	if _swatches.has(who.player_id):
-		return _swatches[who.player_id]
-	var image := Image.create(8, 8, false, Image.FORMAT_RGBA8)
-	var hue := fposmod(float(posmod(hash(String(who.player_id)), 100003)) * 0.6180339887, 1.0)
-	image.fill(Color.from_hsv(hue, 0.6, 0.9))
-	var texture := ImageTexture.create_from_image(image)
-	_swatches[who.player_id] = texture
+func _face(who: DrPlayer) -> Texture2D:
+	return _portrait(str(who.call("_atlas")))
+
+
+func _portrait(atlas: String) -> Texture2D:
+	if _portraits.has(atlas):
+		return _portraits[atlas]
+
+	var view := SubViewport.new()
+	view.name = "Portrait%d" % _portraits.size()
+	view.size = Vector2i(64, 64)
+	view.own_world_3d = true
+	view.transparent_bg = true
+	view.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(view)
+
+	var figure := DrFigure.new()
+	view.add_child(figure)
+	figure.build(1.8, atlas, Color.WHITE)
+	figure.global_position = Vector3.ZERO
+
+	var eye := Camera3D.new()
+	eye.fov = 30.0
+	view.add_child(eye)
+	# In front of the face (a figure looks down -Z) and a touch above it, looking back.
+	eye.look_at_from_position(Vector3(0.0, 1.55, -1.6), Vector3(0.0, 1.45, 0.0), Vector3.UP)
+	eye.current = true
+
+	var texture := view.get_texture()
+	_portraits[atlas] = texture
 	return texture
 
 

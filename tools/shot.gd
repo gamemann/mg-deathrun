@@ -18,6 +18,9 @@ const DrGame := preload("../game/dr_game.gd")
 var _view := "eyes"
 var _seconds := 4.0
 
+## `--board`: the Tab scoreboard held open over the frame.
+var _board: bool = false
+
 ## How long `--view=end` waits after arriving; `--end-wait=N`.
 var _end_wait := 1.5
 var _out := "res://screenshots/shot.png"
@@ -30,6 +33,8 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--view="):
 			_view = arg.trim_prefix("--view=")
+		elif arg == "--board":
+			_board = true
 		elif arg.begins_with("--end-wait="):
 			_end_wait = arg.trim_prefix("--end-wait=").to_float()
 		elif arg.begins_with("--seconds="):
@@ -125,6 +130,9 @@ func _run() -> void:
 			await _seconds_of(maxf(1.5, _end_wait))
 		_:
 			await _seconds_of(_seconds)
+
+	if _board:
+		_client.call("_show_board", true)
 
 	await _frames(3)
 	var image := get_viewport().get_texture().get_image()
