@@ -1,0 +1,45 @@
+# The round: sides, the end, credit, points, the vote
+
+The second asymmetric game in the family and the first where **the hazards are another player's decisions**: nothing on a course moves until an activator presses its button, every trap kills, and nothing comes back (no respawn, no checkpoint). The skill on one side is getting through; on the other it is timing. Built from mg-wipeout's skeleton; where a comment says another game found something, the line was kept because it is still true here.
+
+## The sides are drawn
+
+Two fixed sides, `RUNNERS` (1) and `ACTIVATORS` (2). At the top of every round `DrGame._draw_sides` draws `config.activators_for(players)`: one per `players_per_activator` (8), at least one, at most `max_activators` (6), never everybody, **from everybody who was not an activator last round**, shuffled on the round's own seed. A rotation is fairer on paper and gamed in practice (leave and rejoin to move up it); a draw that repeats reads as favouritism. `activator_may_repeat` turns the exclusion off.
+
+**A player may choose** (`allow_side_choice`): `!activator`, `!runner`, `!any` in chat, as module commands. The draw orders volunteers, then the undecided, then those who asked to run, who are drawn only when the round would otherwise have no activator, because it must have one.
+
+A joiner mid-round is benched: watching, unhurtable, on no side. They cannot end a round by existing.
+
+## A round is decided by the game
+
+`DrRules` returns CUSTOM when `DrGame` has decided: every runner out, activators win; every activator out (including one who leaves), runners win; the clock, `timeout_winner` (activators by default). dot-match's own backstop is the countdown plus the round plus a minute.
+
+## The end
+
+The first runner across the finish is teleported into the end arena with a weapon from the pool and **calls every activator down** (`Phase.SHOWDOWN`): armed (`activator_weapon`, or the pool), at `activator_health_scale` (1.5) times health because it is one against several, everybody untouchable for `arrival_grace_seconds` on arrival. **The buttons stop**: a runner still on the course runs it with nobody pressing, the reward for the runner ahead. Every later finisher arrives armed the same way.
+
+## Credit
+
+A trapdoor kills nobody; the spikes under it do. `_watch_course` remembers the last running trap whose zone each runner was in (`_credit`), and a fall or a pit within `CREDIT_SECONDS` (4) is that trap's, credited to whoever pressed it (`pressed_by`) as dot-combat damage with them as attacker, so the kill feed, dot-match and `DrProgress.TRAP_KILLS` agree.
+
+## Points and the Tab board
+
+`winner_points` (10) to everybody on the winning side and `first_across_points` (5), replicated as `net_points` beside `net_ping` (dot-server's session ping), on dot-menu's scoreboard under Tab with the player's face, name, side, points, time and ping. The face is the figure's head rendered once per skin into a small SubViewport (`DrClient._portrait`; six skins cover everybody, a site avatar's choice included).
+
+## Runners do not see the activators
+
+`activators_seen` is off: a runner's client does not draw the activators behind the walls, except in the showdown.
+
+## The course vote
+
+A round here is a course, so dot-vote's ROUND_END trigger (open at a round's end, apply at the next) is one course late. `DrVote` uses MANUAL: a ballot opens `dr_vote_after` (20) seconds into every course and is applied at the round's end (`apply: END_OF_ROUND`), setting `DrGame.next_course_id`, which the next `_lay_out_course` uses once. A rocked vote also waits for the round's end (`rtv_apply`), because changing the floor mid-round kills everybody on it. No time limit (`duration_sec` 0), the current course is on the ballot, no cooldown (a server with two courses would otherwise offer nothing). Stand-ins do not vote, so a server of stand-ins never opens one. dot-vote's command set comes with it, and the client shell draws the ballot from the `map_ballot` notice. An owner reshapes it in `user://cfg/deathrun_vote.json` or `game.yml`'s `metadata: course_vote:`, keyed as `DotVoteRules`; `{"enabled": false}` leaves the rotation alone. Not yet tried in a browser.
+
+## Weapons and the figure in somebody's hand
+
+mg-smash-copter's watcher figures, ported as they are (`DrFigure` is that file renamed): a `ZeeWorldModel` at the end of the kit's `arm-right`, read off the rig for a player this process simulates and off the snapshot's slot among the weapons the server announced (`DrPlayer.dealt`, from each `ARMED`) for a mirror. The reasoning is in [mg-smash-copter's client.md](../../mg-smash-copter/docs/client.md#figures-and-a-gun-in-somebody-elses-hand). The server sends the wanted slot on every tick (`weapon_command_for`), which relies on dot-weapon not restarting a switch on a repeated select.
+
+**The bridge connects `player_armed` itself.** mg-wipeout wired it in the module, so the net suite, which has no module, never heard a weapon handed out.
+
+## Settings
+
+`DrSettings` is dot-menu's `DotMenuSettings` with this game's schema (sensitivity ACCOUNT at the family's 0.022 degrees per unit, field of view SERVER_CLAMPED with default 92, three volumes). Escape opens it; walking is suspended while it is up.

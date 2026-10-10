@@ -1,0 +1,15 @@
+# Stand-ins
+
+An empty server fills with stand-ins on both sides. Every rule below was earned with `tools/trace_run` (`-- --course=<id> --every=0.25` prints where a stand-in runner goes).
+
+## Runners
+
+Runners follow the document's `route`. **A `jump` point is where a jump LANDS**; the take-off is wherever a ray finds no floor ahead (`_floor_at`, through the world layer, so an open trapdoor is not a floor). Naming take-off points too made the bot aim at the take-off it stood on and jump backwards off the first block into the spikes.
+
+- **Stop after landing, then step back to the middle** (`_bot_settle`) before running at the next landing. A jump taken the tick after a landing keeps the last jump's momentum (landed a metre and a half wide, every time); stopping at the far edge leaves no run-up.
+- **Jump at the edge, or earlier only if fast enough** (speed × a standing jump's airtime ≥ the distance to the landing). From the middle of a small block the stride ahead is already over the gap, and the bot took off at walking pace.
+- **The air brake is measured along the velocity**, not along the line to the target (mg-wipeout's finding): a block half a metre to the side projected a two-metre overshoot onto nothing. The brake is the constant deceleration `2·over/t²`.
+
+## Activators
+
+Activators walk straight along the walkway to the button of the ready trap whose zone the nearest live runner is closest to (never one wholly behind the runners), and press it once a runner has been in its zone for `bot_trap_delay` (0.25 s). Straight walking is why every course's walkway is straight; `headless_courses` walks one to every button.
