@@ -76,10 +76,13 @@ dr_timeout_winner 2            // who wins when the clock runs out: 0 draw, 1 ru
 dr_activator_health 1.5        // how much tougher activators are at the end
 dr_autobhop 0                  // 1 = hold jump to keep hopping
 dr_bot_trap_delay 0.25         // how late bot activators press, in seconds
-dr_min_players 3               // fill the round with bots up to this
+bot_quota 3                    // players a round is kept at with bots; each person who joins replaces one
+bot_quota_mode fill            // fill (as above), fixed (that many bots), per_player (that many per person) or off
 dr_bots 1                      // 0 = no bots
 dr_vote_after 20               // seconds into a course before the vote for the next one opens
 ```
+
+The bot cvars are the family's shared ones (dot-server's `DotBotQuota`). `dr_min_players` still works and sets `bot_quota`; it is deprecated.
 
 `--dr-course-ids=<ids>` limits a server to some courses. The vote's settings go in `user://cfg/deathrun_vote.json` (`{"enabled": false}` turns it off); dot-vote's README lists them.
 
