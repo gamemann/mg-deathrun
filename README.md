@@ -20,7 +20,7 @@ The runners win if every activator is killed or leaves. The activators win if ev
 
 Partway through each course, players vote for the next one (`!vote 2`, `!rtv`, `!nominate dr_foundry`).
 
-There are three courses: a short practice run built into the game, and **Ice Works** and **The Foundry** from [mg-deathrun-maps](https://github.com/gamemann/mg-deathrun-maps).
+There are three courses: a short practice run built into the game, and **Ice Works** and **The Foundry** from [mg-deathrun-maps](https://github.com/zees-games/mg-deathrun-maps).
 
 ## Controls
 
@@ -100,7 +100,7 @@ Console commands:
 These come from [dot-moderation](https://github.com/modcommunity/dot-moderation): `noclip`, `freeze`, `speed`, `gravity`, `god`, `buddha`, `hp`, `slay`, `slap`, `rename`, the teleports, `blind` and `beacon`. `respawn` puts somebody back at the start of their side. `give` and `strip` are turned off, because the weapons are what the end hands out.
 
 ## Writing a course
-A course is a JSON file: a start, a corridor of pieces and traps, a walkway with a button for every trap, a finish and an end arena. The courses are in [mg-deathrun-maps](https://github.com/gamemann/mg-deathrun-maps), whose `tools/build_courses.py` writes them section by section (so the corridor and the walkway always line up). That is also the easiest way to write a new one. [`courses/README.md`](courses/README.md) describes the format. The server sends the course to each player when the round starts, so players don't need the course files.
+A course is a JSON file: a start, a corridor of pieces and traps, a walkway with a button for every trap, a finish and an end arena. The courses are in [mg-deathrun-maps](https://github.com/zees-games/mg-deathrun-maps), whose `tools/build_courses.py` writes them section by section (so the corridor and the walkway always line up). That is also the easiest way to write a new one. [`courses/README.md`](courses/README.md) describes the format. The server sends the course to each player when the round starts, so players don't need the course files.
 
 ## Testing
 
@@ -125,7 +125,7 @@ A course is a JSON file: a start, a corridor of pieces and traps, a walkway with
 - There is no settings menu.
 
 ## Credits
-Every surface is Kenney's Prototype Textures, tinted per course, and the players are Kenney's Blocky Characters ([kenney.nl](https://kenney.nl), CC0). The weapons are from [zee-dot-weapons](https://github.com/gamemann/zee-dot-weapons). Spikes, blades, fire and pools are drawn in code. Each kit's licence is next to its files.
+Every surface is Kenney's Prototype Textures, tinted per course, and the players are Kenney's Blocky Characters ([kenney.nl](https://kenney.nl), CC0). The weapons are from [zee-dot-weapons](https://github.com/zees-games/zee-dot-weapons). Spikes, blades, fire and pools are drawn in code. Each kit's licence is next to its files.
 
 ## License
 MIT. See [LICENSE](LICENSE). The Kenney art is CC0, which is public domain.
