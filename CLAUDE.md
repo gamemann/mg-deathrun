@@ -53,7 +53,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - The draw excludes last round's activators (unless `activator_may_repeat`), shuffles on the round's seed, honours side choice, and never leaves a round without an activator.
 - `DrRules` returns CUSTOM once `DrGame` decides; a mid-round joiner is benched on no side.
 - At the end the buttons stop. Trap kills are credited to whoever pressed (`_credit`, `CREDIT_SECONDS`).
-- The vote applies at a round's end (MANUAL trigger, `END_OF_ROUND`), rocked votes too: changing the floor mid-round kills everybody on it.
+- The vote applies at a round's end (MANUAL trigger, `END_OF_ROUND`), rocked votes too: changing the floor mid-round kills everybody on it. The match answers dot-vote's `round_in_progress_fn` (`world.match_node.is_live()`, set by name because an older shell's dot-vote lacks it), so a `time_up: finish_round` limit that runs out in warmup or between rounds changes at once instead of holding for `finish_round_max_sec`; `dedicated` checks both halves.
 - Under MANUAL `DrVote` opens a passed rock-the-vote itself (dot-vote does not), and `_game_load` refreshes the course list after the delivered courses: without either, `!rtv` or a delivered server never gets a ballot. [design](docs/design.md#the-course-vote)
 - The bridge connects `player_armed` itself; never only in the module.
 - Runners do not see activators (`activators_seen` off) except in the showdown.
