@@ -52,6 +52,7 @@ func _run() -> void:
 	_section("every document loads")
 	_check(catalogue.refused.is_empty(), "none was refused", str(catalogue.refused))
 	_check_machinery(catalogue)
+	_check_facing(catalogue)
 	_finished()
 
 	var traps := 0
@@ -72,7 +73,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 4
-	var checks := 2 + courses.size() * (2 + 1 + 2) + traps + spared
+	var checks := 4 + courses.size() * (2 + 1 + 2) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -120,6 +121,41 @@ func _check_machinery(catalogue: DrCatalogue) -> void:
 	var named := DrAudio.trap_sound({"sound": "grind", "parts": [{"spin": 900.0}]}) == DrAudio.TRAP_GRIND
 	_check(wrong.is_empty() and named and (catalogue.courses.size() <= 1 or heard.size() >= 4),
 		"every trap sounds like its machine, and a document can say which", "%s; %d kinds" % [", ".join(wrong), heard.size()])
+
+
+## A freshly placed player faces the course, and can see it past the closed gate.
+##
+## The game-vote harness's frames of a player who had just joined deathrun were an orange wall
+## (2026-10-11). The spawn faced the course; the wall was the start gate, opaque, 1.4 m in
+## front of the front row for all of warmup. So both halves: the yaw every runner and activator
+## is placed with points down the course (at the finish), and the gate is see-through.
+func _check_facing(catalogue: DrCatalogue) -> void:
+	var wrong := PackedStringArray()
+
+	for id: StringName in catalogue.courses:
+		var doc: Dictionary = catalogue.courses[id]
+		var finish: Vector3 = doc["finish"]["at"]
+
+		for area in ["start", "activators"]:
+			for seat in range(3):
+				var spot := DrCourse.spot_in(doc[area], seat, 3)
+				var facing := Basis(Vector3.UP, deg_to_rad(float(spot[1]))) * Vector3.FORWARD
+				var ahead := finish - (spot[0] as Vector3)
+				ahead.y = 0.0
+				var along := facing.dot(ahead.normalized())
+
+				if along < 0.9:
+					wrong.append("%s %s seat %d: yaw %.0f, %.2f toward the finish" % [
+						id, area, seat, float(spot[1]), along
+					])
+
+	_check(wrong.is_empty(), "every runner and activator is placed facing down the course",
+		"; ".join(wrong) if not wrong.is_empty() else "%d courses" % catalogue.courses.size())
+
+	var gate := DrCourse.gate_material()
+	_check(gate.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED and gate.albedo_color.a < 0.6,
+		"the start gate is see-through, so the front row sees the course and not a wall",
+		"alpha %.2f" % gate.albedo_color.a)
 
 
 ## A stand-in runs the course with nobody pressing anything, and gets to the end.

@@ -42,6 +42,9 @@ const PLAYER_CROUCHED := 0.9
 ## How far below a start gate goes when it opens.
 const GATE_DROP := 80.0
 
+## How opaque the start gate is drawn. See [method gate_material].
+const GATE_ALPHA := 0.35
+
 ## What [method lethal_at] answers for the always-on killers: a pit, a pool, a drop.
 const KILLED_BY_COURSE := -2
 
@@ -876,10 +879,24 @@ func _build_gate() -> void:
 	_gate = StaticBody3D.new()
 	_gate.name = "Gate"
 	_gate_rest = Transform3D(basis, at + basis * Vector3(0.0, size.y * 0.5, -size.z * 0.5 - 0.2))
-	_add_box(_gate, Vector3(size.x + 0.4, size.y, 0.3), DrTextures.surface(DrTextures.Role.CANNON), true)
+	_add_box(_gate, Vector3(size.x + 0.4, size.y, 0.3), gate_material(), true)
 	add_child(_gate)
 	_put_on_world_layer(_gate)
 	_place_gate()
+
+
+## The gate's surface: the moving-part tile, see-through.
+##
+## [b]See-through because a runner spends the whole warmup and countdown facing it[/b], from
+## the front row 1.4 m away. Opaque, it filled the screen: every frame of a freshly joined
+## player was an orange wall, which read as a spawn facing the wrong way when the spawn faced
+## the course exactly as it should. Through it the runner sees what they are about to run.
+## Still the moving-part colour (it drops away when the round starts), and still solid.
+static func gate_material() -> StandardMaterial3D:
+	var material := DrTextures.surface(DrTextures.Role.CANNON).duplicate() as StandardMaterial3D
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color.a = GATE_ALPHA
+	return material
 
 
 func _place_gate() -> void:
