@@ -53,6 +53,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - `DrRules` returns CUSTOM once `DrGame` decides; a mid-round joiner is benched on no side.
 - At the end the buttons stop. Trap kills are credited to whoever pressed (`_credit`, `CREDIT_SECONDS`).
 - The vote applies at a round's end (MANUAL trigger, `END_OF_ROUND`), rocked votes too: changing the floor mid-round kills everybody on it.
+- Under MANUAL `DrVote` opens a passed rock-the-vote itself (dot-vote does not), and `_game_load` refreshes the course list after the delivered courses: without either, `!rtv` or a delivered server never gets a ballot. [design](docs/design.md#the-course-vote)
 - The bridge connects `player_armed` itself; never only in the module.
 - Runners do not see activators (`activators_seen` off) except in the showdown.
 

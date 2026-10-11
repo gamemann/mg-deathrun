@@ -185,6 +185,12 @@ func _game_load() -> DotResult:
 	# and no client is ever told about. Invisible floors: a player stands on nothing and the
 	# server says they are fine.
 	var _delivered: int = await _add_delivered_courses(world)
+
+	# The vote was built above, before these arrived; read without them, its list held only
+	# the practice course and never opened a ballot. dr_reload refreshes it the same way.
+	if vote != null:
+		vote.refresh_courses()
+
 	world.start()
 
 	log_info("the course is up", world.describe())

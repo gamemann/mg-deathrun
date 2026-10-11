@@ -108,6 +108,22 @@ func setup() -> DotResult:
 
 	add_child(director)
 
+	# [b]Rock the vote opens the ballot here, because MANUAL never does.[/b] Under MANUAL the
+	# director hands every opening to its host, a rocked vote included: the clock expires
+	# with reason rtv, the director does nothing, and `!rtv` answered "Rocked. 1 of 1." and
+	# nothing happened. Connected after the director's own handler (its _ready runs first),
+	# so the director has finished with the expiry before this asks for a ballot.
+	director.clock.expired.connect(func(reason: StringName) -> void:
+		if reason != DotVoteClock.REASON_RTV or director.is_voting():
+			return
+
+		_opened_this_course = true
+		var opened := director.start_vote(DotVoteClock.REASON_RTV)
+
+		if not opened.ok:
+			DotLog.debug(CHANNEL, "the rocked vote could not open", {"why": opened.error.message})
+	)
+
 	director.vote_closed.connect(func(result: DotVoteResult) -> void:
 		DotLog.info(CHANNEL, "the course vote closed", {"winner": String(result.winner_id), "votes": result.votes_cast})
 	)
@@ -151,6 +167,10 @@ func _rules() -> DotVoteRules:
 	# There is no clock to extend, and "this course again" is a fair thing to want when a
 	# server has two.
 	rules.include_extend = false
+	# Rock the vote from the start line. dot-vote's two minutes keep a long map from being
+	# rocked the moment it loads; here a course is shorter than that, and its own ballot opens
+	# at open_after_sec anyway, so the delay would make `!rtv` a command that never works.
+	rules.rtv_delay_sec = 0.0
 	rules.include_current = true
 	# Plays, not minutes: two courses with a cooldown of five would offer nothing at all.
 	rules.cooldown = 0
@@ -161,7 +181,10 @@ func _rules() -> DotVoteRules:
 	return rules
 
 
-## Reads the course list again: on boot, and after the catalogue changes.
+## Reads the course list again: on boot, after the delivered courses arrive, and after
+## [code]dr_reload[/code]. The module calls it after [code]_add_delivered_courses[/code]: built
+## before them, the list held only the built-in practice course, and a list of one never
+## opens a ballot.
 func refresh_courses() -> void:
 	if source == null:
 		return

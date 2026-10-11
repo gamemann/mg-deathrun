@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 9
-const CHECKS := 46
+const CHECKS := 49
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -337,6 +337,18 @@ func _test_the_course_vote() -> void:
 	game.call("_lay_out_course")
 	_check(game.stage.id() == &"dr_foundry" and game.next_course_id == &"",
 		"and the next course laid is the one voted for, once", "%s / %s" % [game.stage.id(), game.next_course_id])
+
+	# Rock the vote, typed at the console as a player's !rtv reaches it. Under MANUAL the
+	# director opens nothing itself, a passed rtv included: it answered "Rocked. 1 of 1." and
+	# no ballot came. Past dot-vote's cooldown between two ballots, on the director alone so
+	# the course's own ballot timer does not open one first.
+	_check(director.current_id() == &"dr_foundry" and not director.is_voting(),
+		"the new course starts the vote over", str(director.current_id()))
+	vote.set("voters_fn", func() -> Array: return [&"console"])
+	director.advance(director.rules.vote_cooldown_sec + 0.1)
+	var rocked := _run_command("rtv")
+	vote.call("advance", 0.05)
+	_check(director.is_voting(), "and a passing rock-the-vote opens a ballot", str(rocked))
 	_finished()
 
 
@@ -375,6 +387,35 @@ func _test_a_reload_keeps_delivered_courses() -> void:
 		str(game.catalogue.courses.keys()))
 	_check(game.catalogue.courses.has(&"dr_practice"),
 		"beside the built-in one")
+
+	# The ballot sees them from boot, not only after a reload: _game_load builds the vote
+	# before the delivered courses arrive, and a list read then held only the practice course,
+	# which never opens a ballot. A module loaded again with the pack named is a boot.
+	# Unloaded and loaded rather than module_reload, which reloads the script under the
+	# world's live instances and says so on stderr.
+	# Every course, not only this suite's practice one, for the length of this check.
+	var only := game.config.course_ids
+	game.config.course_ids = PackedStringArray()
+	# And as a boot finds it: the world outlives the module, and its catalogue still holds the
+	# course from the dr_reload above, which a vote built at load would read without the fix.
+	var _builtin := game.catalogue.load_from(game.config.course_directory)
+	var _reloaded := _run_command("module_unload deathrun")
+	_reloaded.append_array(_run_command("module_load res://game/dr_module.gd"))
+	for _i in range(60):
+		await get_tree().process_frame
+
+		if _module() != null and _module().get("vote") != null:
+			break
+	var booted_vote: Node = _module().get("vote") if _module() != null else null
+	var booted_ids: Array = []
+
+	if booted_vote != null:
+		for choice: DotVoteChoice in (booted_vote.get("source") as DotVoteListSource).entries:
+			booted_ids.append(String(choice.id))
+
+	_check(booted_ids.has(String(id)), "and on the ballot of a module that boots with it named, unrefreshed",
+		"%s %s" % [_reloaded, booted_ids])
+	game.config.course_ids = only
 
 	manager.set("_current", was)
 	var _second := _run_command("dr_reload")
