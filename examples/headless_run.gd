@@ -4,7 +4,9 @@ const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrCourse := preload("../game/dr_course.gd")
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
+const DrClient := preload("../game/dr_client.gd")
 const DrGame := preload("../game/dr_game.gd")
+const DrHud := preload("../game/dr_hud.gd")
 const DrPaths := preload("../game/dr_paths.gd")
 const DrPlayer := preload("../game/dr_player.gd")
 const DrProgress := preload("../game/dr_progress.gd")
@@ -19,9 +21,9 @@ const DrProgress := preload("../game/dr_progress.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 23
+const SECTIONS := 24
 
-const CHECKS := 96
+const CHECKS := 103
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -67,6 +69,7 @@ func _run() -> void:
 	await _test_progress()
 	await _test_side_choice()
 	await _test_the_client_settings()
+	await _test_the_hud()
 
 	for world in _worlds.duplicate():
 		await _dispose(world)
@@ -874,6 +877,90 @@ func _test_the_client_settings() -> void:
 	remove_child(client)
 	client.free()
 	await get_tree().process_frame
+	_finished()
+
+
+## The HUD's clock, health and trap prompt are dot-ui's glance pieces, handed this world's
+## numbers. A headless viewport is 64 x 64, so the layout is checked as arithmetic on two
+## bottom-anchored things and looked at with `tools/shot.sh --view=end` and `--view=button`.
+func _test_the_hud() -> void:
+	_section("the HUD draws the clock, health and the trap prompt through dot-ui")
+	var game := await _world(func(c: DrConfig) -> void: c.countdown_seconds = 0.2)
+	var players := await _round(game, 2)
+	var runner := players[0]
+	var activator := players[1]
+	await _step(game, int(0.3 * TICK_RATE))
+
+	var hud := DrHud.new()
+	add_child(hud)
+	hud.use_key = DrClient.USE_KEY
+	hud.bind(game, activator)
+	hud._process(0.0)
+	_check(
+		game.phase == DrGame.Phase.RUN and hud.strip.clock == DotScoreStrip.clock_text(game.seconds_left())
+		and hud.strip.under_text() == hud._phase_line() and hud._phase_line().contains(" E "),
+		"the strip shows the clock, the phase line under it, naming the use key",
+		"%s / %s" % [hud.strip.clock, hud.strip.under_text()]
+	)
+
+	# At the first button, looking at it: the prompt is the trap's name with the key as a key.
+	var button := game.stage.button_point(0)
+	activator.place_at(button + Vector3(1.0, -DrCourse.BUTTON_HEIGHT + 0.05, 0.0), 90.0)
+	await _step(game, 1)
+	var look := button - activator.eye_position()
+	var command := DotFpsCommand.new()
+	command.yaw = rad_to_deg(atan2(-look.x, -look.z))
+	command.pitch = clampf(rad_to_deg(asin(clampf(look.normalized().y, -1.0, 1.0))), -89.0, 89.0)
+	activator.controller.apply_command(command)
+	await _step(game, 1)
+	hud._process(0.0)
+	_check(
+		hud.prompt.visible and hud.prompt.words == game.stage.trap_name(0) and hud.prompt.key == "E",
+		"looking at a ready button, DotKeyPrompt names its trap with the use key",
+		hud.prompt.text()
+	)
+	var _pressed := game.press(0, activator.player_id)
+	await _step(game, 1)
+	hud._process(0.0)
+	_check(
+		hud.prompt.visible and hud.prompt.words.ends_with("spent") and hud.prompt.key == "",
+		"spent, it says so and offers no key", hud.prompt.text()
+	)
+
+	# Health only at the end.
+	hud.bind(game, runner)
+	hud._process(0.0)
+	_check(not hud.vitals.visible, "a runner on the course has no health on screen")
+	runner.at_end = true
+	runner.health.health = 17.4
+	hud._process(0.0)
+	_check(
+		hud.vitals.visible and hud.vitals.number_text() == "18" and hud.vitals.is_low(),
+		"at the end DotVitals shows it, red at a quarter",
+		"%s low=%s" % [hud.vitals.number_text(), str(hud.vitals.is_low())]
+	)
+
+	var chat := DrClient.new_chat()
+	add_child(chat)
+	var w: DotChatWindow = chat.window
+	var log_top := w.margin_bottom + w.entry_height + float(w.max_lines) * (w.line_height + w.line_gap)
+	var plate_bottom := -(hud.vitals.offset_top + hud.vitals.footprint().end.y)
+	_check(
+		plate_bottom >= log_top,
+		"a full chat log stays under the health plate",
+		"log reaches %.0f px off the bottom, the plate ends %.0f off it" % [log_top, plate_bottom]
+	)
+	chat.queue_free()
+
+	# A pack naming these classes does not parse on a shell whose dot-ui predates them, so
+	# the requires.json dot-ci derives must ask for dot-ui 4, and nothing may lower it.
+	var asks := DotAddonApi.derive()
+	_check(
+		int(asks.get("dot_ui", 0)) >= 4 and not FileAccess.file_exists("res://" + DotAddonApi.FLOOR_FILE),
+		"the pack asks a shell for dot-ui level 4, the glance pieces",
+		str(asks.get("dot_ui"))
+	)
+	hud.queue_free()
 	_finished()
 
 

@@ -44,6 +44,9 @@ const CHASE_UP := 2.1
 ## Which key swaps the camera over. Physical, because the letter differs across layouts.
 const VIEW_KEY := KEY_F5
 
+## The key that presses a trap's button, held and sent every tick. The HUD names it.
+const USE_KEY := KEY_E
+
 @export var config_file: String = "user://cfg/deathrun.json"
 
 ## Play alone even when a link is available. `--offline`.
@@ -357,7 +360,7 @@ func _on_phase(phase: int) -> void:
 			_disarm_locally()
 
 			if is_activator():
-				hud.shout("YOU ARE THE ACTIVATOR — E presses a button", 3.5)
+				hud.shout("YOU ARE THE ACTIVATOR — %s presses a button" % DrHud.key_text(USE_KEY), 3.5)
 			else:
 				hud.shout("RUN — the gate drops soon", 2.5)
 		DrGame.Phase.RUN:
@@ -784,6 +787,7 @@ func toggle_view() -> void:
 func _build_hud() -> void:
 	hud = DrHud.new()
 	hud.name = "Hud"
+	hud.use_key = USE_KEY
 	add_child(hud)
 
 
@@ -1377,7 +1381,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_reloading = true
 			return
 
-		if key.physical_keycode == KEY_E:
+		if key.physical_keycode == USE_KEY:
 			# Held, and sent every tick in this game's own input message; the server makes the
 			# edge. A request instead would be a press resolved a round trip after the key,
 			# against a runner who has left the trap.
@@ -1388,7 +1392,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if (event as InputEventKey).physical_keycode == KEY_R:
 			_reloading = false
 
-		if (event as InputEventKey).physical_keycode == KEY_E:
+		if (event as InputEventKey).physical_keycode == USE_KEY:
 			_use = false
 
 	if event is InputEventMouseButton:

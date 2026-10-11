@@ -6,6 +6,8 @@ extends Node
 ##   tools/shot.sh --view=course --dr-course-ids=dr_ice_works   # a course, from above
 ##   tools/shot.sh --view=start                     # the start, from behind the runners
 ##   tools/shot.sh --view=activator                 # the walkway, from the activator's eyes
+##   tools/shot.sh --view=button                    # the activator at a button: the key prompt
+##   tools/shot.sh --view=button --spent            # ...once that trap is spent
 ##   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5   # a trap, half a second after its press
 ##   tools/shot.sh --view=third                     # third person, mid-course
 ##   tools/shot.sh --view=end                       # the end arena, from a runner who made it
@@ -26,6 +28,8 @@ var _end_wait := 1.5
 var _out := "res://screenshots/shot.png"
 var _trap := ""
 var _after := 0.5
+## `--spent`: `--view=button` presses the trap first, so the prompt says it is spent.
+var _spent := false
 var _client: Node = null
 
 
@@ -33,6 +37,8 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--view="):
 			_view = arg.trim_prefix("--view=")
+		elif arg == "--spent":
+			_spent = true
 		elif arg == "--board":
 			_board = true
 		elif arg.begins_with("--end-wait="):
@@ -61,7 +67,7 @@ func _run() -> void:
 	# the picture did not ask for.
 	await _until_a_round(game)
 	var local = _client.get("player")
-	var activator := _view == "activator"
+	var activator := _view == "activator" or _view == "button"
 
 	# One activator: the person at this keyboard for the activator's view, a stand-in otherwise.
 	var drawn := false
@@ -102,6 +108,15 @@ func _run() -> void:
 			await _seconds_of(_seconds)
 			var eyes: Vector3 = local.eye_position()
 			_free_camera().look_at_from_position(eyes, eyes + Vector3(-3.2, -2.6, -8.0))
+		"button":
+			# The activator a step in front of the first button, facing it through their own
+			# camera, so the HUD's prompt is the one the client draws for that aim.
+			await _seconds_of(game.config.countdown_seconds + 0.3)
+			var post: Vector3 = game.stage.button_point(0) - Vector3(0.0, 1.0, 0.0)
+			local.place_at(Vector3(post.x, local.controller.state.position.y, post.z + 1.2), 0.0)
+			if _spent:
+				var _pressed := game.press(0, local.player_id)
+			await _seconds_of(0.6)
 		"trap":
 			await _seconds_of(game.config.countdown_seconds + 0.3)
 			var index: int = game.stage.trap_index(_trap) if _trap != "" else 0

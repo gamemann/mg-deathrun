@@ -21,15 +21,23 @@ const DrPlayer := preload("dr_player.gd")
 var game: DrGame = null
 var player: DrPlayer = null
 
-var _clock: Label = null
-var _phase: Label = null
+## The clock with the phase line under it: dot-ui's [DotScoreStrip], clock alone.
+var strip: DotScoreStrip = null
 var _role: Label = null
-var _health: Label = null
+## Health at the end: dot-ui's [DotVitals], bar and number on one plate, red at a quarter.
+## Hidden on the course; see the class note.
+var vitals: DotVitals = null
 var _field: Label = null
 var _course: Label = null
 var _shout: Label = null
 var _traps: Label = null
-var _prompt: Label = null
+## What the use key would do now, at a button: dot-ui's [DotKeyPrompt], the trap's name
+## with the key drawn as a key, or "<trap> — spent" with none.
+var prompt: DotKeyPrompt = null
+
+## The key that presses a button. `DrClient.USE_KEY`, handed over by the client so the prompt
+## and the phase line name the key the client actually reads.
+var use_key: Key = KEY_E
 
 ## What a player who is out is looking at, and the keys that change it. Empty while playing.
 var watching_label: Label = null
@@ -50,6 +58,44 @@ const BLIND_COLOUR := Color(0.01, 0.01, 0.015)
 
 const READY_COLOUR := Color(0.55, 0.95, 0.55)
 const SPENT_COLOUR := Color(0.70, 0.40, 0.38)
+
+## Seconds left at which the clock turns red.
+const LOW_CLOCK_SEC := 10.0
+
+## The course name's pale blue, which is also the glance pieces' highlight.
+const COURSE_COLOUR := Color(0.80, 0.88, 0.98)
+
+
+## The glance pieces' colours in this game's palette: a dark slate-violet plate that holds
+## over the pale walls and the warm sky, the course name's pale blue as highlight, the ready
+## button's green as "good". Static so a render tool can use it.
+static func piece_theme() -> Theme:
+	var t := Theme.new()
+	var type := DotHudPiece.THEME_TYPE
+	t.set_color(&"plate", type, Color(0.09, 0.08, 0.16, 0.64))
+	t.set_color(&"plate_edge", type, Color(COURSE_COLOUR, 0.3))
+	t.set_color(&"highlight", type, COURSE_COLOUR)
+	t.set_color(&"good", type, READY_COLOUR)
+	t.set_color(&"low", type, Color(1.0, 0.35, 0.3))
+	return t
+
+
+## The prompt's theme while the button in front of the activator is spent: the trap's name
+## in the spent colour, so it reads as unavailable before the missing key does.
+static func spent_theme() -> Theme:
+	var t := piece_theme()
+	t.set_color(&"text", DotHudPiece.THEME_TYPE, SPENT_COLOUR.lightened(0.3))
+	return t
+
+
+static var _spent: Theme = null
+
+
+## A key's name as the family writes a binding ("E").
+static func key_text(physical: Key) -> String:
+	var event := InputEventKey.new()
+	event.physical_keycode = physical
+	return DotInputBinding.to_text(event)
 
 
 func bind(p_game: DrGame, p_player: DrPlayer) -> void:
@@ -81,24 +127,25 @@ func _build() -> void:
 
 	var size := 22
 
-	_clock = _label(size + 14)
-	_clock.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_clock.offset_top = 16.0
-	_clock.offset_bottom = 72.0
-	_clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# The glance pieces read their colours from the theme on the type DotHudPiece; set on
+	# the root, every piece under it inherits them. See [method piece_theme].
+	_root.theme = piece_theme()
 
-	_phase = _label(size)
-	_phase.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_phase.offset_top = 74.0
-	_phase.offset_bottom = 108.0
-	_phase.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# The clock, and the phase line under it. Full width, because the strip centres itself
+	# on its own middle; the course name sits under it.
+	strip = DotScoreStrip.new()
+	strip.name = "Clock"
+	strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	strip.offset_top = 16.0
+	strip.offset_bottom = 96.0
+	_root.add_child(strip)
 
 	_course = _label(size - 4)
 	_course.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_course.offset_top = 110.0
-	_course.offset_bottom = 140.0
+	_course.offset_top = 94.0
+	_course.offset_bottom = 124.0
 	_course.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_course.add_theme_color_override("font_color", Color(0.80, 0.88, 0.98))
+	_course.add_theme_color_override("font_color", COURSE_COLOUR)
 
 	# Top left: which side you are, in that side's colour. The one fact about a round that
 	# changes every round and that everything else on the screen depends on.
@@ -120,13 +167,16 @@ func _build() -> void:
 
 	# Under the crosshair, small: what E would do now. Close to where the eye already is,
 	# because an activator presses while watching the trap, not the corner of the screen.
-	_prompt = _label(size)
-	_prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	_prompt.offset_left = -300.0
-	_prompt.offset_right = 300.0
-	_prompt.offset_top = 26.0
-	_prompt.offset_bottom = 60.0
-	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt = DotKeyPrompt.new()
+	prompt.name = "Prompt"
+	prompt.font_size = 19
+	prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	prompt.offset_left = -300.0
+	prompt.offset_right = 300.0
+	prompt.offset_top = 26.0
+	prompt.offset_bottom = 62.0
+	prompt.visible = false
+	_root.add_child(prompt)
 
 	# Down the right: the activator's traps. Above the field count, which is bottom right.
 	_traps = _label(size - 4)
@@ -139,12 +189,19 @@ func _build() -> void:
 
 	# Above the chat box, because the chat box also draws itself bottom-left: mg-wipeout's
 	# first render had the health number and the first line of chat in the same forty pixels.
-	_health = _label(size + 16)
-	_health.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_health.offset_left = 30.0
-	_health.offset_right = 300.0
-	_health.offset_top = -210.0
-	_health.offset_bottom = -150.0
+	# Above its FULL eight-row log, which reaches 202 pixels off the bottom: the plate is 56
+	# tall and ends at 206 (checked in headless_run). The old number ended at 150, over it.
+	vitals = DotVitals.new()
+	vitals.name = "Vitals"
+	vitals.bar_end = 220.0
+	vitals.fill_colour = READY_COLOUR
+	vitals.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	vitals.offset_left = 24.0
+	vitals.offset_right = 24.0 + 340.0
+	vitals.offset_top = -262.0
+	vitals.offset_bottom = -206.0
+	vitals.visible = false
+	_root.add_child(vitals)
 
 	_field = _label(size)
 	_field.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -237,8 +294,12 @@ func _process(delta: float) -> void:
 		return
 
 	var left := game.seconds_left()
-	_clock.text = "%d:%02d" % [int(left) / 60, int(left) % 60]
-	_phase.text = _phase_line()
+	# No clock between rounds or while waiting: a plate reading 0:00 over "between rounds"
+	# says the same thing twice. Red for the last ten seconds.
+	var running := game.phase != DrGame.Phase.IDLE and game.sides_are_playable()
+	strip.show_clock(
+		DotScoreStrip.clock_text(left) if running else "", left <= LOW_CLOCK_SEC, _phase_line()
+	)
 	_course.text = str((game.stage.doc if game.stage != null else {}).get("name", ""))
 
 	var side := game.team_of(player.player_id) if player != null else 0
@@ -247,11 +308,10 @@ func _process(delta: float) -> void:
 	_role.add_theme_color_override("font_color", game.side_colour(side).lightened(0.25))
 
 	if player != null and player.health != null and player.at_end and player.is_alive():
-		_health.text = "%d" % int(round(player.health.health))
-		var hurt := player.health.health <= player.health.max_health * 0.25
-		_health.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3) if hurt else Color(1, 1, 1))
+		vitals.show_vitals(player.health.health, player.health.max_health)
+		vitals.visible = true
 	else:
-		_health.text = ""
+		vitals.visible = false
 
 	_field.text = "%d running · %d at the buttons" % [
 		game.alive_on(DrGame.RUNNERS), game.alive_on(DrGame.ACTIVATORS)]
@@ -294,7 +354,7 @@ func _phase_line() -> String:
 			if player != null and player.watching:
 				return "you joined mid-round — watching"
 			if activator:
-				return "press E at a button while they are in its trap"
+				return "press %s at a button while they are in its trap" % key_text(use_key)
 			return "%.1f s" % game.run_elapsed
 		DrGame.Phase.SHOWDOWN:
 			if player != null and player.at_end:
@@ -308,17 +368,32 @@ func _phase_line() -> String:
 
 ## The activator's traps, ready or spent, and the button in front of them.
 func _draw_traps(side: int) -> void:
-	_prompt.text = ""
 	_traps.text = ""
+	var looking := _trap_lines(side)
 
+	if looking < 0:
+		prompt.clear()
+	elif game.stage.trap_ready(looking, game.current_tick()):
+		prompt.theme = null
+		prompt.show_prompt(game.stage.trap_name(looking), key_text(use_key))
+	else:
+		if _spent == null:
+			_spent = spent_theme()
+		prompt.theme = _spent
+		prompt.show_prompt("%s — spent" % game.stage.trap_name(looking))
+
+
+## Fills the list down the right and returns the button the activator is looking at, or -1.
+## The prompt is set once a frame from that, so it redraws only when it changes.
+func _trap_lines(side: int) -> int:
 	if game.stage == null or side != DrGame.ACTIVATORS or player == null or player.at_end \
 			or not player.is_alive() or is_blind():
-		return
+		return -1
 
 	var tick := game.current_tick()
 
 	if game.phase != DrGame.Phase.RUN and game.phase != DrGame.Phase.COUNTDOWN:
-		return
+		return -1
 
 	var lines := PackedStringArray()
 
@@ -328,18 +403,8 @@ func _draw_traps(side: int) -> void:
 
 	_traps.text = "\n".join(lines)
 
-	var looking := game.stage.button_for(player.eye_position(), player.aim_direction(),
+	return game.stage.button_for(player.eye_position(), player.aim_direction(),
 		game.config.button_reach, game.config.button_cone)
-
-	if looking < 0:
-		return
-
-	if game.stage.trap_ready(looking, tick):
-		_prompt.text = "E — %s" % game.stage.trap_name(looking)
-		_prompt.add_theme_color_override("font_color", READY_COLOUR)
-	else:
-		_prompt.text = "%s — spent" % game.stage.trap_name(looking)
-		_prompt.add_theme_color_override("font_color", SPENT_COLOUR)
 
 
 ## How far along the course a runner is: from the start line to the finish, along the line
