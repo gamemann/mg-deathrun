@@ -806,48 +806,37 @@ func _on_round_ended(number: int, winner: int, _outcome: int) -> void:
 ## playing favourites. So: everybody who was not an activator last round goes in the hat, and
 ## the hat is the round's own seed.
 func _draw_sides() -> void:
-	var ids: Array = players.keys()
+	var ids: Array[StringName] = []
+	for id: StringName in players.keys():
+		ids.append(id)
 	ids.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 
-	var wanted := config.activators_for(ids.size())
-	var hat: Array = []
-
-	for id: StringName in ids:
-		if config.activator_may_repeat or not _last_activators.has(id):
-			hat.append(id)
-
-	# Not enough fresh names: everybody goes back in, rather than a round short of activators.
-	if hat.size() < wanted:
-		hat = ids.duplicate()
-
-	var stream := random.stream(&"activators")
-	_shuffle(hat, stream)
-
-	# The players' own choices, after the shuffle so each group stays in drawn order:
-	# volunteers first, the undecided next, and anybody who asked to run last — drawn only if
+	# The players' own choices: a volunteer is drawn first, anybody who asked to run only if
 	# the round would otherwise be short of an activator, because there must always be one.
+	var wishes := {}
 	if config.allow_side_choice:
-		var keen: Array = []
-		var either: Array = []
-		var reluctant: Array = []
-		for id: StringName in hat:
+		for id in ids:
 			match (players[id] as DrPlayer).side_wish:
 				ACTIVATORS:
-					keen.append(id)
+					wishes[id] = 1
 				RUNNERS:
-					reluctant.append(id)
-				_:
-					either.append(id)
-		hat = keen + either + reluctant
+					wishes[id] = -1
 
+	# dot-team's draw, which was extracted from this one. rest_first keeps this game's rule:
+	# last round's activators sit out even if they volunteered, and come back only when there
+	# are not enough fresh names (unless the server lets them repeat).
+	var history := {}
+	DotTeamRotation.note(history, ids, _last_activators, 0)
+	var result := DotTeamRotation.pick(
+		ids, config.activators_for(ids.size()), DotTeamRotation.Mode.RANDOM, history,
+		random.stream(&"activators").next(), wishes, config.activator_may_repeat, true
+	)
 	var drawn: Array[StringName] = []
-
-	for index in range(mini(wanted, hat.size())):
-		drawn.append(hat[index])
+	drawn.assign(result["picked"])
 
 	_last_activators = drawn
 
-	for id: StringName in ids:
+	for id in ids:
 		_set_side(id, ACTIVATORS if drawn.has(id) else RUNNERS)
 
 
@@ -1313,14 +1302,6 @@ func _weapon_pool() -> Array[StringName]:
 		ZeeWeaponIds.SHOTGUN, ZeeWeaponIds.MARKSMAN,
 	])
 	return out
-
-
-static func _shuffle(items: Array, stream: DotRandomStream) -> void:
-	for i in range(items.size() - 1, 0, -1):
-		var j := stream.next_range_i(0, i)
-		var held: Variant = items[i]
-		items[i] = items[j]
-		items[j] = held
 
 
 # --- Weapons -----------------------------------------------------------------
