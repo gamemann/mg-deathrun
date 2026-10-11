@@ -442,8 +442,8 @@ func _draw_look(parent: Node3D, size: Vector3, look: String, face: String, tint:
 ## A bed of spikes filling [param size], pointing along [param face].
 ##
 ## [b]Cones on a base plate, and the cones are the whole tell.[/b] A trap part a runner must
-## not touch has to be readable as one from a jump away, and in a grey corridor the shape
-## carries that where a colour alone does not.
+## not touch has to be readable as one from a jump away, and the shape carries that where a
+## colour alone does not; the plate is the hazard red besides.
 func _draw_spikes(parent: Node3D, size: Vector3, face: String, tint: Color, moving: bool) -> void:
 	# Which way the points go, and the box's extent along it and across it.
 	var up := Vector3.UP
@@ -472,7 +472,9 @@ func _draw_spikes(parent: Node3D, size: Vector3, face: String, tint: Color, movi
 	plate_box.size = (size - up.abs() * (along - plate_depth))
 	plate.mesh = plate_box
 	plate.position = -up * (along * 0.5 - plate_depth * 0.5)
-	plate.material_override = DrTextures.surface(DrTextures.Role.PILLAR, moving)
+	# The hazard red, not the walls' colour: the walls are a pale lavender, and a spike wall's
+	# plate in the walls' colour was a spike wall that vanished into the wall it slides out of.
+	plate.material_override = DrTextures.surface(DrTextures.Role.HAZARD, moving)
 	parent.add_child(plate)
 
 	var pitch := clampf(minf(width_a, width_b) / 2.0, 0.35, 0.6)
@@ -913,43 +915,29 @@ func _build_markers() -> void:
 
 
 ## The sky, the sun, the fog and the void. Client side.
+##
+## [b]The light is a dot-lighting document made from the course's theme[/b]
+## ([method light_document]), so the family's look (game-arena's built-in maps: a warm sun
+## with soft shadows, a pale cool fill, filmic tone map, glow) and each course's own sky,
+## horizon, sun colour and void are one thing rather than two that can disagree.
 func _build_world() -> void:
 	var theme: Dictionary = doc.get("theme", {})
 
-	var sun := DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation = Vector3(deg_to_rad(-55.0), deg_to_rad(28.0), 0.0)
-	# mg-smash-copter's number, measured under `gl_compatibility`: higher and every prototype
-	# surface comes back within a few percent of white.
-	sun.light_energy = 0.82
-	sun.light_color = theme.get("sun", Color(1.0, 0.97, 0.92))
-	sun.shadow_enabled = true
-	add_child(sun)
+	var lighting := Node3D.new()
+	lighting.name = "Lighting"
+	add_child(lighting)
+	var sun := DotLightRig.apply(lighting, DotLightDocument.from_dictionary(light_document(theme)), light_profile())
+	if sun != null:
+		sun.shadow_blur = 1.5
 
-	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-
-	var sky := Sky.new()
-	var material := ProceduralSkyMaterial.new()
-	material.sky_top_color = theme.get("sky", Color(0.48, 0.60, 0.74))
-	material.sky_horizon_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
-	material.ground_bottom_color = theme.get("void", Color(0.10, 0.12, 0.16))
-	material.ground_horizon_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
-	sky.sky_material = material
-	env.sky = sky
-
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.3
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.68
-	env.fog_enabled = true
-	env.fog_light_color = theme.get("horizon", Color(0.80, 0.85, 0.90))
-	env.fog_density = float(theme.get("fog", 0.004))
-
-	var world_env := WorldEnvironment.new()
-	world_env.name = "Environment"
-	world_env.environment = env
-	add_child(world_env)
+	for node in lighting.get_children():
+		if node is WorldEnvironment and (node as WorldEnvironment).environment.sky != null:
+			var material := (node as WorldEnvironment).environment.sky.sky_material as ProceduralSkyMaterial
+			if material != null:
+				# The theme's sky at the zenith (the rig draws it in the ambient colour), and
+				# the void's colour under the horizon, which is what a falling runner sees.
+				material.sky_top_color = theme.get("sky", Color(0.48, 0.60, 0.74))
+				material.ground_bottom_color = theme.get("void", Color(0.10, 0.12, 0.16))
 
 	# The floor of the drop: what everybody who falls sees coming. Drawn only; the fall is a
 	# height comparison in [DrGame], because a trigger volume can be stepped over between two
@@ -965,6 +953,57 @@ func _build_world() -> void:
 	floor_mesh.material_override = floor_material
 	floor_mesh.position = Vector3(0.0, kill_height() - 2.0, 0.0)
 	add_child(floor_mesh)
+
+
+## The dot-lighting document a course's theme describes.
+##
+## The angles are dot-lighting's source convention (a negative pitch is a sun in the sky),
+## high so a corridor wall does not put the floor in shade, and behind the start, so the
+## faces a runner runs toward (a trap's front, the gate) are the lit ones. The brightness is
+## divided by the profile's reference and square-rooted. The ambient is the light in the
+## shade, a pale cool grey whatever the theme: a saturated fill turns every shaded face into
+## the theme's colour and a red hazard in shade into brown. The fog is the theme's horizon
+## from 120 m out (source units, metres / 0.01905), so no trap a runner must read is hidden
+## in it; the theme's `fog` density was the old exponential fog's and is not used.
+static func light_document(theme: Dictionary) -> Dictionary:
+	var sun: Color = theme.get("sun", Color(1.0, 0.97, 0.92))
+	var horizon: Color = theme.get("horizon", Color(0.80, 0.85, 0.90))
+	return {
+		"sun": {
+			"pitch_src": -54.0,
+			"yaw_src": 145.0,
+			"colour": [sun.r, sun.g, sun.b],
+			"brightness": 380.0,
+			"spread_degrees": 1.0,
+			"ambient_colour": [0.74, 0.78, 0.92],
+		},
+		"fog": {
+			"enabled": true,
+			"colour": [horizon.r, horizon.g, horizon.b],
+			"start": 6300.0,
+			"end": 40000.0,
+			"max_density": 0.4,
+		},
+	}
+
+
+## What this machine draws of a course's light.
+##
+## [b]Shadows stay on in the browser[/b], unlike dot-lighting's `web()`: a course is a few
+## hundred boxes, and a trap's shadow on the floor is how a runner sees where it is.
+## [b]The Compatibility renderer, which this game and the client shell use, has no headroom
+## above white[/b]: at Forward+'s numbers every deck clips to white and the grid, which is
+## how far a jump is, is gone. So under `gl_compatibility` the sun is divided by 700 instead
+## of 200 and the fill is 0.62, game-arena's numbers, checked here against a rendered frame
+## in both renderers.
+static func light_profile() -> DotLightProfile:
+	var p := DotLightProfile.web() if OS.has_feature("web") else DotLightProfile.high()
+	p.sun_shadows = true
+	p.ambient_energy = 1.0
+	if RenderingServer.get_current_rendering_method() == "gl_compatibility":
+		p.brightness_reference = 700.0
+		p.ambient_energy = 0.62
+	return p
 
 
 # --- Where everything is ------------------------------------------------------

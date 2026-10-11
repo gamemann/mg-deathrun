@@ -13,11 +13,10 @@ const DrPaths := preload("dr_paths.gd")
 ## what those are drawn as is decided here once. The alternative is a colour per box,
 ## which means replacing the look is editing every line that builds a box.
 ##
-## The six files are [b]Kenney's Prototype Textures 1.0[/b], CC0 — public domain, no
+## The three files are [b]Kenney's Prototype Textures 1.0[/b], CC0 — public domain, no
 ## attribution required, strictly more permissive than the MIT this repository ships
-## under. `textures/prototype/LICENSE.txt` is Kenney's own, copied unchanged. Only the six
-## referenced files are vendored; the kit is six colours by thirteen patterns and the rest
-## is not needed.
+## under. `textures/prototype/LICENSE.txt` is Kenney's own, copied unchanged. Only the
+## referenced files are vendored: the light grid, the orange and the red.
 
 const CHANNEL := "dr.textures"
 
@@ -25,7 +24,7 @@ const CHANNEL := "dr.textures"
 enum Role {
 	## Ground that stays still. What most of a course is.
 	DECK,
-	## Supports, frames and gantries. Dark, so a deck reads against it.
+	## Supports, frames, walls and gantries. Darker than a deck, so a deck reads against it.
 	PILLAR,
 	## Ground that MOVES: a turntable, a mover, a roller, a tile. The colour that says "this
 	## will not be where it is now".
@@ -45,24 +44,48 @@ enum Role {
 ## of the `texture_13`s have `WALL / 1 x 1 meter / 1024 x 1024` painted into the corner of
 ## the image. Tiled across a map that is a label repeating every eight metres, and the
 ## number on it is wrong here anyway. game-g2gfast checked this per file rather than per
-## number and wrote down why; this is the same six choices.
+## number and wrote down why; these are the same choices.
 const ROLE_FILES := {
 	Role.DECK: "deck.png",
-	Role.PILLAR: "pillar.png",
+	Role.PILLAR: "deck.png",
 	Role.CANNON: "cannon.png",
-	Role.ARENA: "arena.png",
+	Role.ARENA: "deck.png",
 	Role.HAZARD: "hazard.png",
-	Role.SAFE: "safe.png",
+	Role.SAFE: "deck.png",
+}
+
+## A colour an INSTALLED texture is multiplied by, for a role drawn from the light deck.
+##
+## [b]Only the two roles a runner must react to keep a colour tile of their own[/b]: the
+## orange of something that moves and the red of something that kills. Everything else is
+## the light deck under a pastel, the family's sunny look (game-arena's built-in maps), so
+## the traps are the saturated things on screen and nothing competes with them. Multiplying
+## the light grey is not the double tint `surface` warns about, because the grey has no
+## colour to muddy. A course's theme `deck` colour multiplies the deck on top of this.
+##
+## - The deck is a hair under white: at full white under the sun every deck clipped and the
+##   grid, which is how far a jump is, was gone.
+## - Walls, supports and the walkway's frame are a light lavender, no longer charcoal: still
+##   darker than a deck so the floor reads against them, without a black corridor in a
+##   sunny frame.
+## - Starts, finishes and the rail are mint, no longer Kenney's neon green.
+## - [b]The end arena is lavender, not Kenney's purple[/b], which rendered as a magenta
+##   floor the whole showdown was fought on (mg-wipeout found the same).
+const INSTALLED_TINTS := {
+	Role.DECK: Color(0.96, 0.96, 1.00),
+	Role.PILLAR: Color(0.80, 0.76, 0.96),
+	Role.ARENA: Color(0.80, 0.70, 1.00),
+	Role.SAFE: Color(0.58, 0.96, 0.78),
 }
 
 ## What the generated fallback grid is tinted with, per role, when no set is installed.
 const ROLE_COLOURS := {
-	Role.DECK: Color(0.74, 0.76, 0.79),
-	Role.PILLAR: Color(0.30, 0.31, 0.34),
+	Role.DECK: Color(0.90, 0.90, 0.95),
+	Role.PILLAR: Color(0.80, 0.76, 0.96),
 	Role.CANNON: Color(0.86, 0.48, 0.18),
-	Role.ARENA: Color(0.55, 0.43, 0.68),
+	Role.ARENA: Color(0.80, 0.70, 1.00),
 	Role.HAZARD: Color(0.72, 0.27, 0.26),
-	Role.SAFE: Color(0.36, 0.62, 0.38),
+	Role.SAFE: Color(0.58, 0.96, 0.78),
 }
 
 ## How many squares are across one tile of the installed set.
@@ -110,6 +133,9 @@ static var _materials: Dictionary = {}
 ## Composited installed textures, by role. Null means "looked for it and it is not here".
 static var _installed: Dictionary = {}
 
+## Composited installed textures, by file, which several roles share.
+static var _by_path: Dictionary = {}
+
 ## The one generated tile, shared by every role and tinted per role.
 static var _grid: ImageTexture = null
 
@@ -138,6 +164,8 @@ static func surface(role: Role, moving: bool = false) -> StandardMaterial3D:
 		# installed set brings its own colour and is drawn white, because multiplying
 		# Kenney's orange by a role tint is a double tint that produces mud.
 		material.albedo_color = ROLE_COLOURS.get(role, Color.WHITE)
+	else:
+		material.albedo_color = INSTALLED_TINTS.get(role, Color.WHITE)
 
 	material.albedo_texture = texture
 
@@ -208,8 +236,12 @@ static func installed(role: Role) -> Texture2D:
 		_installed[role] = null
 		return null
 
-	var checkered := _with_checker(loaded as Texture2D)
-	_installed[role] = checkered if checkered != null else loaded as Texture2D
+	# Four roles share the light deck, so the checker is composited once per file, not per
+	# role: it is a million-pixel loop in GDScript.
+	if not _by_path.has(path):
+		var checkered := _with_checker(loaded as Texture2D)
+		_by_path[path] = checkered if checkered != null else loaded as Texture2D
+	_installed[role] = _by_path[path]
 	return _installed[role]
 
 
@@ -298,6 +330,7 @@ static func grid_texture() -> ImageTexture:
 static func forget_cache() -> void:
 	_materials.clear()
 	_installed.clear()
+	_by_path.clear()
 	_grid = null
 
 

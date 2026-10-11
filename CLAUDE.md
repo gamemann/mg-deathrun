@@ -45,6 +45,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - Moving parts are static bodies teleported through the physics server, never kinematic (a step late) or rigid; `headless_courses` relies on that to skip physics frames.
 - A trap is parts on a timeline (`move | turn | spin`, `solid`, `lethal`), never a new kind. A new effect is a new part property, handled once in validator, builder, death test and carry.
 - The tell is written into the document by `DrGame.with_tell`, in `_lay_out_course` only, so it is never added twice and clients predict it exactly. Its flash is drawn only, never moved.
+- Only moving parts (orange) and lethal parts (red) keep a colour tile; every other role is the light grid under a pastel (`DrTextures.INSTALLED_TINTS`). The light is a dot-lighting document from the course theme (`DrCourse.light_document`), turned down under Compatibility. [design](docs/design.md#colour-and-light)
 - One document is the whole map (both corridors, the end arena). Buttons at least 2.6 m apart; the walkway straight; the runners' wall no higher than the walkway on the activator's side; trap floors drawn as floor.
 - Courses live in mg-deathrun-maps and reach servers through the owner's map config; `_add_delivered_courses` runs at load and after every `dr_reload`. The game's own pack carries only `dr_practice`.
 

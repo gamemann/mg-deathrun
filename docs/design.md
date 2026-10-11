@@ -40,6 +40,14 @@ mg-smash-copter's watcher figures, ported as they are (`DrFigure` is that file r
 
 **The bridge connects `player_armed` itself.** mg-wipeout wired it in the module, so the net suite, which has no module, never heard a weapon handed out.
 
+## Colour and light
+
+The family's sunny look (game-arena's built-in maps) with each course's theme kept and the traps the only saturated things on screen: moving parts are Kenney's orange, lethal parts and the spike plates Kenney's red, and nothing else competes with them.
+
+- **Surfaces** are roles (`DrTextures`): the deck, walls and supports, starts and finishes, and the end arena all draw Kenney's light grid under a pastel (`INSTALLED_TINTS`: a hair-under-white deck, light lavender walls, mint safe ground, lavender arena), and the theme's `deck` colour multiplies the deck on top. A white deck clipped under the sun and lost the grid, which is how far a jump is; charcoal walls made every corridor a dark tunnel; Kenney's purple arena was a magenta floor. A spike plate in the walls' colour hid a spike wall in the wall it slides out of, so plates are the hazard red.
+- **Light is a dot-lighting document made from the course's theme** (`DrCourse.light_document`): the theme's sun colour, its sky at the zenith, its horizon as fog from 120 m, its void under the horizon; a warm high sun behind the start, so the faces a runner runs toward are lit; a pale cool fill whatever the theme; filmic and glow. The theme's old `fog` density is no longer read. A repaint never touches geometry or a course document.
+- **Compatibility** (this game's and the shell's renderer) clips a sunlit pastel to white at Forward+'s numbers, so `DrCourse.light_profile()` divides the sun by 700 instead of 200 and drops the fill to 0.62 (game-arena's numbers). Shadows stay on in the browser. Check a look change in Forward+ too (`GODOT=<a wrapper that adds --rendering-method forward_plus> tools/shot.sh`).
+
 ## Settings
 
 `DrSettings` is dot-menu's `DotMenuSettings` with this game's schema (sensitivity ACCOUNT at the family's 0.022 degrees per unit, field of view SERVER_CLAMPED with default 92, three volumes). Escape opens it; walking is suspended while it is up.
