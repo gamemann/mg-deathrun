@@ -272,15 +272,13 @@ func _exit_tree() -> void:
 
 ## The named collision layers: the world and the players.
 ## The player's motor mask under `mp_solidplayers`, and the standing hull the others stop at
-## (a player's body has no shape of its own). Through `set_collision_mask`, because a plain
-## write to the tunables is undone by the next style. With the rule on, a stand-in stops at
+## (a player's body has no shape of its own). Through `apply_to`: `set_collision_mask`, which
+## a style does not undo, and the players' layer as one a player may walk out of. With the rule on, a stand-in stops at
 ## your shoulder instead of walking through your face (the first play test).
 func _apply_body_mask(player: DrPlayer) -> void:
 	if physics == null or player == null or player.controller == null:
 		return
-	player.controller.set_collision_mask(
-		body_rules.mask(physics.collision_mask(&"player"), physics.layer_mask(&"player"))
-	)
+	body_rules.apply_to(player.controller, physics.collision_mask(&"player"), physics.layer_mask(&"player"))
 	var tunables := player.controller.tunables
 	body_rules.apply_hull(player, tunables.stand_height, tunables.radius)
 
