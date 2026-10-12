@@ -305,7 +305,10 @@ func setup() -> DotResult:
 	manager.voices = 24
 	# Measured toward the family's -17 LUFS (dot-audio docs/loudness.md): a 40 s stand-in run
 	# on the practice course read -19.7 LUFS integrated with the beds and steps in; -18.0 after.
-	manager.loudness_trim_db = 2.0
+	# Once the stand-in turned off walls (2026-10-12): a run is as loud as the runner is alive,
+	# so it swings with how soon a trap gets it (-21.7 at +3.5 with the camera at 45 m, -18.5
+	# at 145 m). At +6.5: -17.1, -17.1 and -18.9 (camera 165, 166 and 95 m).
+	manager.loudness_trim_db = 6.5
 	add_child(manager)
 
 	var ready_now := manager.setup()
