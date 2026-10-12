@@ -53,6 +53,7 @@ func _run() -> void:
 	_check(catalogue.refused.is_empty(), "none was refused", str(catalogue.refused))
 	_check_machinery(catalogue)
 	_check_facing(catalogue)
+	_check_sound_ids()
 	_finished()
 
 	var traps := 0
@@ -73,7 +74,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 4
-	var checks := 4 + courses.size() * (2 + 1 + 2) + traps + spared
+	var checks := 5 + courses.size() * (2 + 1 + 2) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -121,6 +122,27 @@ func _check_machinery(catalogue: DrCatalogue) -> void:
 	var named := DrAudio.trap_sound({"sound": "grind", "parts": [{"spin": 900.0}]}) == DrAudio.TRAP_GRIND
 	_check(wrong.is_empty() and named and (catalogue.courses.size() <= 1 or heard.size() >= 4),
 		"every trap sounds like its machine, and a document can say which", "%s; %d kinds" % [", ".join(wrong), heard.size()])
+
+
+## [method DrAudio.ids] is every sound the catalogue knows, both ways: a sound in the catalogue
+## and not in the list is one a preload or a listing misses (the four death sounds were, until
+## 2026-10-12).
+func _check_sound_ids() -> void:
+	var listed := {}
+	for id: StringName in DrAudio.ids():
+		listed[id] = true
+	var known := {}
+	for id: StringName in DrAudio.sound_catalogue().ids():
+		known[id] = true
+	var missing := PackedStringArray()
+	for id: StringName in known:
+		if not listed.has(id):
+			missing.append("unlisted " + String(id))
+	for id: StringName in listed:
+		if not known.has(id):
+			missing.append("uncatalogued " + String(id))
+	_check(missing.is_empty() and listed.has(DotPlayerDeathReactions.SOUND_FACE_PLANT),
+		"every catalogued sound is listed, the death sounds too", ", ".join(missing))
 
 
 ## A freshly placed player faces the course, and can see it past the closed gate.
