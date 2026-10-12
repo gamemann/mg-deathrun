@@ -25,6 +25,9 @@ var _board: bool = false
 
 ## How long `--view=end` waits after arriving; `--end-wait=N`.
 var _end_wait := 1.5
+## `--fire=N`: at the end, the trigger held for N seconds before the frame (the flash, the
+## tracer and the impact in it, and the counter down).
+var _fire := 0.0
 var _out := "res://screenshots/shot.png"
 var _trap := ""
 var _after := 0.5
@@ -43,6 +46,8 @@ func _ready() -> void:
 			_board = true
 		elif arg.begins_with("--end-wait="):
 			_end_wait = arg.trim_prefix("--end-wait=").to_float()
+		elif arg.begins_with("--fire="):
+			_fire = arg.trim_prefix("--fire=").to_float()
 		elif arg.begins_with("--seconds="):
 			_seconds = arg.trim_prefix("--seconds=").to_float()
 		elif arg.begins_with("--out="):
@@ -143,6 +148,9 @@ func _run() -> void:
 			# `--end-wait=N` waits longer at the end: the weapon is handed over on arrival and
 			# its deploy is still running at 1.5 s.
 			await _seconds_of(maxf(1.5, _end_wait))
+			if _fire > 0.0:
+				_client.set("_firing", true)
+				await _seconds_of(_fire)
 		_:
 			await _seconds_of(_seconds)
 

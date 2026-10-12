@@ -67,6 +67,8 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - Runners do not see activators (`activators_seen` off) except in the showdown.
 
 **HUD**
+- **The drawn gun is only what the server armed** (`DrClient._give_locally` per `player_armed`/ARMED, never `give_everything`, which left a slot holding whatever was given last), counted by dot-ui's `DotAmmoCounter` bottom right (`DrHud._draw_ammo`), and brought to the server's count after `DRAWN_SETTLE_SEC` quiet (`DrClient.correct_drawn`: owner-only snapshot fields online, the world's rig offline). `headless_run`'s "an armed runner draws the server's gun" is armed.
+- **A hit is the server's word** (`DrGame.hit_landed` from each weapon shot's damages, sent as HIT to the shooter alone): dot-ui's `DotHitMarker` and zee's red burst on the body (`ZeeShotFx.play_body_hit`, by `has_method`). `tools/shot.sh --view=end --fire=N` renders a runner firing.
 - The HUD follows the menu's theme and HUD size (`DrHud.follow_menu`, dot-menu's `follow_hud` by name); `DrHud.piece_theme()` is the accent only (the course blue, the ready green), never plate, text or ink, and the HUD's Labels set no colour of their own except the accent lines. `headless_run` checks a theme change reaches the pieces and the lines.
 
 **Delivery**

@@ -117,6 +117,10 @@ signal achievement_earned(player_id: StringName, title: String, points: int)
 ## Somebody was handed a weapon.
 signal player_armed(player_id: StringName, weapon_id: StringName)
 
+## A weapon's shot took health off somebody: to [param player_id], the shooter, for the hit
+## marker and the hit drawn on the body. The server's word, never a client's prediction.
+signal hit_landed(player_id: StringName, point: Vector3, killed: bool, headshot: bool)
+
 @export var config: DrConfig = null
 
 ## Whether this instance decides anything. A client sets this false.
@@ -1452,7 +1456,8 @@ func _advance_weapons() -> void:
 		for shot in outcome.shots:
 			shot.attacker = player.entity_id
 			shot.tick = _tick
-			var _resolved := combat.resolve_shot(shot)
+			var resolved := combat.resolve_shot(shot)
+			_note_hits(player, resolved)
 
 
 ## A player's movement command as a weapon command: fire, alt-fire and reload are the
@@ -2014,3 +2019,15 @@ func describe_lines() -> PackedStringArray:
 		lines.append_array(stage.describe_lines())
 
 	return lines
+
+
+## Every damage a weapon's shot did to somebody else, as [signal hit_landed] for the shooter.
+## Only what took health and only on the authority: a refused hit, a dead body or the
+## shooter's own splash is no confirmation anybody wants a marker for.
+func _note_hits(shooter: DrPlayer, shot: DotShot) -> void:
+	if not authoritative or shot == null or shooter == null:
+		return
+	for damage: DotDamage in shot.damages:
+		if damage == null or damage.refused or damage.health_lost <= 0.0 or damage.victim == shooter.entity_id:
+			continue
+		hit_landed.emit(shooter.player_id, damage.point, damage.lethal, damage.hit_group == DotHitGroup.HEAD)

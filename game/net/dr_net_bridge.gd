@@ -78,6 +78,8 @@ signal death_received(player_id: int, by: int, why: StringName)
 
 ## Somebody was handed, or picked up, a weapon. The HUD names it.
 signal armed_received(player_id: int, weapon_id: StringName)
+## Your shot landed (see [signal DrGame.hit_landed]); only ever to the shooter.
+signal hit_received(point: Vector3, killed: bool, headshot: bool)
 
 signal notice_received(text: String)
 
@@ -255,6 +257,11 @@ func attach(p_game: Object, p_net: DotNetManager) -> DotResult:
 		# Here and not in the module, which is where mg-wipeout wired it: the net suite has no
 		# module, and an end arena whose handout reached nobody passed every other check.
 		game.player_armed.connect(announce_armed)
+		# To the shooter alone: a hit marker is that player's business.
+		game.hit_landed.connect(func(id: StringName, point: Vector3, killed: bool, headshot: bool) -> void:
+			var hit_peer := peer_for_player(session_of(id))
+			if hit_peer > 0:
+				_tell(hit_peer, DrEvents.Kind.HIT, DrEvents.write_hit(point, killed, headshot)))
 		# To the one who pressed, never broadcast: a refusal is that person's business.
 		game.button_refused.connect(func(id: StringName, why: String) -> void:
 			var peer_id := peer_for_player(session_of(id))
@@ -1112,6 +1119,11 @@ func _on_event(message: DotNetMessage) -> void:
 				death_received.emit(
 					int(death["player_id"]), int(death["by"]), death["why"]
 				)
+		DrEvents.Kind.HIT:
+			var hit := DrEvents.read_hit(reader)
+
+			if bool(hit["ok"]):
+				hit_received.emit(hit["point"], bool(hit["killed"]), bool(hit["headshot"]))
 		DrEvents.Kind.ARMED:
 			var armed := DrEvents.read_armed(reader)
 
