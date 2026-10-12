@@ -36,7 +36,7 @@ A round here is a course, so dot-vote's ROUND_END trigger (open at a round's end
 
 ## Weapons and the figure in somebody's hand
 
-mg-smash-copter's watcher figures, ported as they are (`DrFigure` is that file renamed): a `ZeeWorldModel` at the end of the kit's `arm-right`, read off the rig for a player this process simulates and off the snapshot's slot among the weapons the server announced (`DrPlayer.dealt`, from each `ARMED`) for a mirror. The reasoning is in [mg-smash-copter's client.md](../../mg-smash-copter/docs/client.md#figures-and-a-gun-in-somebody-elses-hand). The server sends the wanted slot on every tick (`weapon_command_for`), which relies on dot-weapon not restarting a switch on a repeated select.
+Players are drawn as the family's animated people: `DrFigure` wraps dot-player-char's `DotHumanoidFigure` (the avatar's blocky atlas letter picks the person, `DotHumanoidLook.from_letter`; the side colour goes on the top; it is told the floor, the vertical speed and the crouch), with a `ZeeWorldModel` in the person's gun hand (a bone attachment, so it moves with the gun clips; a melee swing is the person's slash over the legs), read off the rig for a player this process simulates and off the snapshot's slot among the weapons the server announced (`DrPlayer.dealt`, from each `ARMED`) for a mirror. The reasoning is in [mg-smash-copter's client.md](../../mg-smash-copter/docs/client.md#figures-and-a-gun-in-somebody-elses-hand). The server sends the wanted slot on every tick (`weapon_command_for`), which relies on dot-weapon not restarting a switch on a repeated select.
 
 **The bridge connects `player_armed` itself.** mg-wipeout wired it in the module, so the net suite, which has no module, never heard a weapon handed out.
 

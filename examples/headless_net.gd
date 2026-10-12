@@ -393,8 +393,8 @@ func _test_the_end_crosses() -> void:
 	_check(
 		held_def != null and copy.figure != null and copy.figure.holding == held_def.id
 			and copy.figure.held != null and copy.figure.held.equipped() == held_def.id
-			and hand != null and String(hand.get_parent().name) == "arm-right",
-		"a watcher draws the weapon in their right hand",
+			and hand != null and hand.get_parent() is BoneAttachment3D,
+		"a watcher draws the weapon in their hand (the person's gun-hand bone)",
 		"%s drawn, %s held, dealt %s" % [
 			String(copy.figure.holding) if copy.figure != null else "-",
 			String(held_def.id) if held_def != null else "-", str(copy.dealt)
