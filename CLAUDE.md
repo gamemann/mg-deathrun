@@ -40,6 +40,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 ## Rules
 
 **Traps** ([traps](docs/traps.md))
+- **Offline, the client's buttons go onto the world's own sample** (`DrPlayer.command_stamp`, set in `DrClient._adopt`), never onto `controller.current_command`, which `DrPlayer.simulate` samples over: that way no trigger ever reached the world's gun offline. `headless_run`'s "offline, the client's trigger" is armed ([history](docs/history.md)).
 - **Every key is a `DrBindings` row read through its action**, never a keycode (Escape excepted); the HUD names the use key as bound (`DrHud.use_label`). H is help (dot-menu's stock key; `DrSettings._fill_help`), so no row may default to H. `headless_run` checks it and the Escape menu's Help and Leave.
 - **M is the course list** (dot-menu's map menu): `DrGame.course_rows()` and `change_course_now()` (the next course plus dot-match's `begin_round_now`) serve both solo and the server, where dot-vote's map menu lets the owner's `sv_map_menu_flag` change it now and gives anybody else a vote. No row may default to M; `headless_run` and `dedicated` check it.
 - The only thing about a trap that travels is `TRAP` (index, the PRESS's tick). Never start a trap's clock on arrival.

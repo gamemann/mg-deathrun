@@ -23,9 +23,9 @@ const DrSettings := preload("../game/dr_settings.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 26
+const SECTIONS := 27
 
-const CHECKS := 117
+const CHECKS := 118
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -74,6 +74,7 @@ func _run() -> void:
 	await _test_the_hud()
 	await _test_help_and_menu()
 	await _test_the_map_menu()
+	await _test_offline_trigger()
 
 	for world in _worlds.duplicate():
 		await _dispose(world)
@@ -1029,6 +1030,25 @@ func _test_help_and_menu() -> void:
 
 ## The family's rule since the first play test: M opens the course list, and solo a choice
 ## changes it now. The server's half (the owner's flag, the vote) is in `dedicated` and dot-vote.
+## Offline the world samples the local player's movement itself, so the client's buttons
+## have to go onto that sample. They were stamped on the controller's command and then sampled
+## over, and offline no trigger ever reached the world's gun (game-zombie-zone's play test).
+func _test_offline_trigger() -> void:
+	_section("offline, the client's trigger reaches the world's gun")
+	var game := await _world()
+	var me := game.add_player(&"local", "You", 0, true)
+	await _step(game, 2)
+	var client := DrClient.new()
+	client.game = game
+	client._adopt(me)
+	client._firing = true
+	me.simulate(game.current_tick() + 1, 1.0 / float(TICK_RATE))
+	var pressed := game.weapon_command_for(me).is_pressed(DotWeaponCommand.BUTTON_ATTACK)
+	_check(me.sampler != null and pressed, "the world's weapon command has the trigger the client holds")
+	client.free()
+	_finished()
+
+
 func _test_the_map_menu() -> void:
 	_section("M opens the course list, and solo a choice changes it")
 	var game := await _world(func(c: DrConfig) -> void: c.course_ids = PackedStringArray())
