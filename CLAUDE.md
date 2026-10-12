@@ -64,6 +64,9 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - A dead body falls as dot-player-char's ragdoll: the server picks the fall (`DrGame.decide_death`, on `player.death`), it rides DEATH last and optional, and the client copies it from the figure (`DrClient._fall`). `sv_ragdoll*` cvars bound in the module, REPLICATED, followed by the client. See dot-player-char's [docs/ragdolls.md](../dot-player-char/docs/ragdolls.md).
 - Runners do not see activators (`activators_seen` off) except in the showdown.
 
+**HUD**
+- The HUD follows the menu's theme and HUD size (`DrHud.follow_menu`, dot-menu's `follow_hud` by name); `DrHud.piece_theme()` is the accent only (the course blue, the ready green), never plate, text or ink, and the HUD's Labels set no colour of their own except the accent lines. `headless_run` checks a theme change reaches the pieces and the lines.
+
 **Delivery**
 - No `class_name`; every own `res://` path through `DrPaths.rebase()` where defined; see [mg-buses-from-hell's delivery.md](../mg-buses-from-hell/docs/delivery.md) and [mg-smash-copter's](../mg-smash-copter/docs/delivery.md) for why.
 - dot-server-deploy's `examples/deathrun_client` is the real-client check against a delivered pack.

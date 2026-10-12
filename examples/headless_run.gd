@@ -25,7 +25,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 27
 
-const CHECKS := 118
+const CHECKS := 121
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -985,6 +985,22 @@ func _test_the_hud() -> void:
 		"log reaches %.0f px off the bottom, the plate ends %.0f off it" % [log_top, plate_bottom]
 	)
 	chat.queue_free()
+
+	# Christian's first play test: a darker HUD by default, restyled live by the menu's theme.
+	var settings := DrSettings.new()
+	add_child(settings)
+	var _built: Variant = settings.setup(DotSettingsStoreMemory.new())
+	hud.follow_menu(settings.menu)
+	var plate := hud.vitals.colour(&"plate")
+	_check(plate.get_luminance() < 0.1 and plate.a >= 0.7, "the HUD is dark by default, in the menu's theme", str(plate))
+	var _t := settings.settings.set_value(&"ui_theme", &"contrast")
+	var contrast: DotMenuPalette = settings.menu.palette()
+	_check(contrast.id == &"contrast" and hud.vitals.colour(&"plate") == contrast.hud_plate and hud.vitals.colour(&"text") == contrast.hud_text,
+		"a theme picked in the menu reaches the pieces at once")
+	_check(hud.vitals.colour(&"highlight") == DrHud.COURSE_COLOUR and hud._field.get_theme_color(&"font_color") == contrast.hud_text,
+		"keeping this game's accent, and the HUD's own lines follow it too")
+	_t = settings.settings.set_value(&"ui_theme", &"midnight")
+	settings.queue_free()
 
 	# A pack naming these classes does not parse on a shell whose dot-ui predates them, so
 	# the requires.json dot-ci derives must ask for dot-ui 4, and nothing may lower it.

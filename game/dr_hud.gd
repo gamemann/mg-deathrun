@@ -70,18 +70,33 @@ const LOW_CLOCK_SEC := 10.0
 const COURSE_COLOUR := Color(0.80, 0.88, 0.98)
 
 
-## The glance pieces' colours in this game's palette: a dark slate-violet plate that holds
-## over the pale walls and the warm sky, the course name's pale blue as highlight, the ready
-## button's green as "good". Static so a render tool can use it.
+## This game's accent over whichever theme the player picked in the menu (its highlight and
+## the plates' edge). The plates, the words and their outline are the theme's, dark by default,
+## so a light or high-contrast theme can change them. Static so a render tool can use it.
 static func piece_theme() -> Theme:
 	var t := Theme.new()
 	var type := DotHudPiece.THEME_TYPE
-	t.set_color(&"plate", type, Color(0.09, 0.08, 0.16, 0.64))
 	t.set_color(&"plate_edge", type, Color(COURSE_COLOUR, 0.3))
 	t.set_color(&"highlight", type, COURSE_COLOUR)
 	t.set_color(&"good", type, READY_COLOUR)
-	t.set_color(&"low", type, Color(1.0, 0.35, 0.3))
 	return t
+
+
+## The Escape menu, whose theme this HUD follows (dot-menu's `follow_hud`): the menu sets the
+## theme on the HUD's root now and at every theme change, and applies the player's HUD size.
+## Christian's first play test (2026-10-11) asked for a darker HUD a player can restyle in
+## the menu. Duck-typed and called by name, for a client shell older than dot-menu 7.
+var _menu: Object = null
+
+
+func follow_menu(menu: Object) -> void:
+	_menu = menu
+	_follow()
+
+
+func _follow() -> void:
+	if _root != null and _menu != null and _menu.has_method(&"follow_hud"):
+		_menu.call(&"follow_hud", _root, piece_theme())
 
 
 ## The prompt's theme while the button in front of the activator is spent: the trap's name
@@ -143,6 +158,7 @@ func _build() -> void:
 	# The glance pieces read their colours from the theme on the type DotHudPiece; set on
 	# the root, every piece under it inherits them. See [method piece_theme].
 	_root.theme = piece_theme()
+	_follow()
 
 	# The clock, and the phase line under it. Full width, because the strip centres itself
 	# on its own middle; the course name sits under it.
@@ -276,9 +292,8 @@ func _build_bar() -> void:
 func _label(size: int) -> Label:
 	var label := Label.new()
 	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", Color(1, 1, 1))
-	# An outline rather than a panel behind it: readable over ice, stone and sky alike.
-	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	# An outline rather than a panel behind it: readable over ice, stone and sky alike. Its
+	# colour and the words' are the menu theme's, which a Label under the root takes.
 	label.add_theme_constant_override("outline_size", 6)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(label)
