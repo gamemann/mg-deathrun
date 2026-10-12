@@ -442,13 +442,16 @@ func is_activator() -> bool:
 
 
 ## A new course. The name, once, big.
-func _on_stage(_stage_id: StringName) -> void:
+func _on_stage(stage_id: StringName) -> void:
 	if ragdolls != null:
 		# A body on the old course would hang in the new one's air.
 		ragdolls.clear()
 
 	if game.stage == null:
 		return
+
+	if audio != null:
+		audio.on_course(stage_id, game.stage.doc)
 
 	var name_of := str(game.stage.doc.get("name", ""))
 	var blurb := str(game.stage.doc.get("blurb", ""))
@@ -1305,6 +1308,7 @@ func _present_effects(delta: float) -> void:
 	# camera — so a player watching a team-mate hears what that team-mate hears.
 	if audio != null:
 		audio.listen_from(camera.global_position)
+		audio.keep_walkers(game.players.values())
 
 	if game.effects != null:
 		game.effects.viewer_position = camera.global_position

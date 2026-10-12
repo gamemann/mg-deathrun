@@ -64,6 +64,21 @@ const UI_DENY := &"ui_deny"
 
 var manager: DotAudioManager = null
 
+## Everybody's footsteps by what they stand on, and the course's bed: dot-audio's stock
+## (Kenney's footsteps, generated beds, all CC0; the addon's stock/CREDITS.md).
+var steps: DotAudioFootsteps = null
+var ambience: DotAudioAmbience = null
+
+## Each course's bed and the ground it is built of, for a course document that names neither
+## (`"ambience"` and `"surface"` in a document win). Courses are machinery: the deck is steel
+## plate or stone, and a works hums.
+const COURSE_SOUND := {
+	&"dr_foundry": [&"amb_industrial", &"metal"],
+	&"dr_ice_works": [&"amb_wind", &"metal"],
+	&"dr_temple": [&"amb_cave", &"concrete"],
+	&"dr_practice": [&"amb_industrial", &"concrete"],
+}
+
 
 static func ids() -> Array[StringName]:
 	return [
@@ -73,7 +88,7 @@ static func ids() -> Array[StringName]:
 		# dot-player-char's dead bodies.
 		DotPlayerDeathReactions.SOUND_THUD, DotPlayerDeathReactions.SOUND_FACE_PLANT,
 		DotPlayerDeathReactions.SOUND_SLUMP, DotPlayerDeathReactions.SOUND_WHOOSH,
-	]
+	] + DotAudioStock.ids()
 
 
 ## Every decision about every noise. The distances are a course's: a trap further back than
@@ -86,6 +101,9 @@ static func sound_catalogue() -> DotAudioCatalogue:
 	for machine: StringName in [TRAP_SAW, TRAP_DROP, TRAP_CRUSH, TRAP_FIRE, TRAP_GRIND]:
 		c.add(_placed(machine, 60.0, 12.0, 4, 85, 0.94, 1.06))
 	c.add(_placed(PLAYER_DOWN, 80.0, 12.0, 3, 65, 0.95, 1.05))
+
+	# Footsteps and ambience beds, the family's stock. Added first so nothing here is shadowed.
+	DotAudioStock.add_to(c)
 
 	c.add(_flat(FINISH, &"UI", 2, 80))
 	var beep := _flat(COUNTDOWN, &"UI", 1, 70)
@@ -282,12 +300,25 @@ func setup() -> DotResult:
 	manager.register_as_service = false
 	# Two traps, a death and a firefight at once is the busiest this game gets.
 	manager.voices = 24
+	# Measured toward the family's -17 LUFS (dot-audio docs/loudness.md): a 40 s stand-in run
+	# on the practice course read -19.7 LUFS integrated with the beds and steps in; -18.0 after.
+	manager.loudness_trim_db = 2.0
 	add_child(manager)
 
 	var ready_now := manager.setup()
 
 	if not ready_now.ok:
 		return ready_now.wrap("deathrun audio")
+
+	steps = DotAudioFootsteps.new()
+	steps.name = "Footsteps"
+	steps.manager = manager
+	add_child(steps)
+	ambience = DotAudioAmbience.new()
+	ambience.name = "Ambience"
+	ambience.manager = manager
+	ambience.fallback_bed = &"amb_industrial"
+	add_child(ambience)
 
 	# Only on a real sink: the manager has already decided whether there is a device, and a
 	# headless process has nothing to bake for.
@@ -308,6 +339,21 @@ func setup() -> DotResult:
 func listen_from(at: Vector3) -> void:
 	if manager != null:
 		manager.listener_position = at
+
+
+## A course arrived: its bed and its ground.
+func on_course(id: StringName, doc: Dictionary) -> void:
+	var row: Array = COURSE_SOUND.get(id, [&"amb_industrial", &"concrete"])
+	if steps != null:
+		steps.default_surface = StringName(str(doc.get("surface", row[1])))
+	if ambience != null:
+		ambience.set_map_bed(StringName(str(doc.get("ambience", row[0]))))
+
+
+## Everybody on the course steps, once a frame: the players this client knows, bots included.
+func keep_walkers(bodies: Array) -> void:
+	if steps != null:
+		steps.keep(bodies)
 
 
 ## [param spec] is the trap's document; without one it is the generic impact.
