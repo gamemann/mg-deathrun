@@ -36,6 +36,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - `./game.sh` plays offline; `./game.sh online` runs a local server and browser client; `./game.sh test` parses and runs the four suites. `../mg-deathrun-maps/tools/build_courses.py --check` after any course change.
 - `headless_courses` springs every trap on its `victim` spot and stands a runner on every `spared` spot. Run it after touching traps, the carry or the builder. [testing](docs/testing.md)
 - **Render after touching what anyone sees**: the activator's view, trap colours and the end arena were only found by a picture (`tools/shot.sh --view=activator|trap|third --board|end`).
+- After touching a camera, the view key or player collision: `tools/camera_check.sh` (cameras round every piece, armed; `mp_solidplayers` both ways; `--render` for frames). [design](docs/design.md#cameras-and-bodies)
 
 ## Rules
 
