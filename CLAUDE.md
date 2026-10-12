@@ -66,6 +66,9 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 **Tests** ([testing](docs/testing.md))
 - Every suite counts sections and checks. Read death events, not a later state; keep checks around a round boundary synchronous.
 
+**Project settings**
+- `project.godot` carries no comments: the editor drops them, and any key left at its default, the first time it saves the file, so the reasons for its settings live here. Gravity stays the engine default and nothing reads it: `DrConfig.gravity` is written onto the world's own physics space, because a project setting does not travel inside a delivered pack. The renderer is `gl_compatibility`, what the delivered client runs, and lighting is tuned under it. The canvas texture filter is Nearest so the prototype grid reads as discrete squares at the distance a runner judges the next gap from. Texture imports keep `detect_3d/compress_to=0` (`[importer_defaults]` starts new ones that way) so the editor never re-imports one VRAM-compressed on a first open.
+
 ## Not yet done
 
 The course vote has not been tried in a browser.
