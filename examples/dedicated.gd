@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 10
-const CHECKS := 54
+const CHECKS := 55
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -276,9 +276,19 @@ func _test_a_round_runs() -> void:
 		var bots_after: int = (quota_module.get("_bot_ids") as Array).size()
 		_check(bots_after == bots_before, "and a stand-in comes back when they leave",
 			"%d -> %d" % [bots_with, bots_after])
+		# Named from the game's list through dot-bot, never "Stand-in 2", never twice.
+		var names: Array = []
+		for id: StringName in quota_module.get("_bot_ids"):
+			names.append((game.players[id] as DrPlayer).display_name)
+		var distinct := {}
+		for n in names:
+			distinct[n] = true
+		_check(distinct.size() == names.size() and names.all(func(n: String) -> bool: return DrGame.BOT_NAMES.has(n)),
+			"the stand-ins have names from the list, none shared", str(names))
 	else:
 		_check(false, "a person joining takes a stand-in's place", "no module")
 		_check(false, "and a stand-in comes back when they leave", "no module")
+		_check(false, "the stand-ins have names from the list, none shared", "no module")
 
 	var _restored := _run_command("dr_min_players 3")
 

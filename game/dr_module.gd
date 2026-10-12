@@ -488,7 +488,7 @@ func _keep_the_round_full() -> void:
 		wanted = _quota.wanted(humans, slots)
 
 	for _i in range(maxi(wanted - _bot_ids.size(), 0)):
-		var bot: DrPlayer = bridge.call("add_bot", _bot_name())
+		var bot: DrPlayer = bridge.call("add_bot", _bot_name(world))
 
 		if bot == null:
 			break
@@ -502,12 +502,13 @@ func _keep_the_round_full() -> void:
 		bridge.call("remove_player", DrNetBridge.session_of(leaving))
 
 
-## Names for the stand-ins, so a scoreboard of four of them is readable.
-static func _bot_name() -> String:
-	var names := PackedStringArray([
-		"Lever", "Pressure Plate", "Tripwire", "Pitfall", "Hinge", "Ratchet", "Sprocket", "Fuse",
-	])
-	return String(names[randi() % names.size()])
+## Names for the stand-ins, so a scoreboard of four of them is readable: one nobody in
+## [param world] has yet (drawn at random, two could share one).
+static func _bot_name(world: DrGame) -> String:
+	var taken: Array = []
+	for id: StringName in world.players:
+		taken.append((world.players[id] as DrPlayer).display_name)
+	return DotBotNames.pick(taken, world.players.size(), DrGame.BOT_NAMES)
 
 
 ## Joins the bridge's chat seam to the services layer's router.

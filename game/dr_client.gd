@@ -234,10 +234,13 @@ func _exit_tree() -> void:
 
 
 func _start_offline() -> void:
-	# Stand-ins. Which side anybody is on is the round's draw, the same as on a server.
+	# Stand-ins, named as a server names them. Which side anybody is on is the round's draw,
+	# the same as on a server.
+	var taken: Array = ["You"]
 	for i in range(offline_bots):
-		var bot := game.add_player(StringName("u%d" % (DrNetBridge.FIRST_BOT_SESSION + i)),
-			"Stand-in %d" % (i + 1))
+		var bot_name := DotBotNames.pick(taken, i, DrGame.BOT_NAMES)
+		taken.append(bot_name)
+		var bot := game.add_player(StringName("u%d" % (DrNetBridge.FIRST_BOT_SESSION + i)), bot_name)
 		bot.is_bot = true
 
 	_adopt(game.add_player(&"local", "You", 0, true))
