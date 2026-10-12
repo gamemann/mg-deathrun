@@ -85,6 +85,8 @@ dr_vote_after 20               // seconds into a course before the vote for the 
 
 The bot cvars are the family's shared ones (dot-server's `DotBotQuota`). `dr_min_players` still works and sets `bot_quota`; it is deprecated.
 
+Dead runners fall as ragdolls ([dot-player-char](https://github.com/modcommunity/dot-player-char)); the server picks how each one goes down and everybody sees the same fall. `sv_ragdoll 0` makes it a quick fall with no physics, `sv_ragdoll_style` picks ragdoll, stiff, topple or hide, `sv_ragdoll_time` and `sv_ragdoll_max` say how long and how many, and `sv_ragdoll_reactions` weights the falls (`limp`, `face_plant`, `crumple`, `headshot_launch`, `power_launch`; 0 turns one off).
+
 `mp_teammate_passthrough` is the family's shared one from dot-combat, live from the next shot. At 2 a team-mate in the line never stops a shot; splash still reaches them.
 
 `--dr-course-ids=<ids>` limits a server to some courses. The vote's settings go in `user://cfg/deathrun_vote.json` (`{"enabled": false}` turns it off); dot-vote's README lists them.

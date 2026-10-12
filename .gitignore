@@ -40,6 +40,7 @@
 /addons/dot_platform
 /addons/dot_vote
 /addons/zee_weapons
+/addons/dot_player_char
 
 # The courses are mg-deathrun-maps, a repository and a pack of their own.
 # bootstrap-link: mg-deathrun-maps/courses

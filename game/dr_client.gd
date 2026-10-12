@@ -157,6 +157,7 @@ func _ready() -> void:
 	# The sky, the sun and the void: drawn here, never on a server.
 	game.draw_world = true
 	add_child(game)
+	_build_ragdolls()
 
 	# The sampler lives HERE and not on the player, because on a connected client the local
 	# player does not exist yet: they arrive in a JOIN, several frames after the keyboard
@@ -190,6 +191,39 @@ func _ready() -> void:
 	# [DotPlatform] can measure, and there is no capability to ask.
 	if not DotPlatform.is_web():
 		_capture()
+
+
+# --- Dead bodies -----------------------------------------------------------
+
+## Where the dead lie: dot-player-char's ragdolls under the game's (the server's) rules.
+var ragdolls: DotPlayerRagdolls = null
+
+
+func _build_ragdolls() -> void:
+	ragdolls = DotPlayerRagdolls.new()
+	ragdolls.name = "Ragdolls"
+	ragdolls.rules = game.ragdoll_rules
+	ragdolls.sound_fn = _ragdoll_sound
+	add_child(ragdolls)
+
+
+func _ragdoll_sound(id: StringName, at: Vector3, volume: float) -> void:
+	if audio != null:
+		var _played := audio.on_body(id, at, volume)
+
+
+## [param who]'s body falls the way the server picked ([member DrPlayer.death]), copied from the
+## figure this client draws; the figure itself stays hidden while they are dead
+## ([method DrPlayer.present_body]). Nobody's figure, nothing: a first-person player who never
+## had one drawn here.
+func _fall(who: DrPlayer) -> void:
+	if who == null or ragdolls == null or who.figure == null or not who.figure.is_inside_tree():
+		return
+	if game.physics != null:
+		# The course is on `world`; a body lands on it and on nothing else.
+		game.ragdoll_rules.collision_mask = game.physics.layer_mask(&"world")
+	var velocity := who.controller.state.velocity if who.controller != null else Vector3.ZERO
+	var _body := ragdolls.spawn(who.figure, who.death if who.death != null else DotPlayerDeath.new(), velocity)
 
 
 # --- Offline ---------------------------------------------------------------
@@ -231,6 +265,9 @@ func _build_netcode() -> DotResult:
 	# opposite. An older shell's link cannot say, and the manager keeps its default.
 	if game.combat != null and link != null:
 		var _following := game.combat.follow_cvars(link)
+	# The server's sv_ragdoll* set: this end draws the bodies.
+	if link != null:
+		var _bodies := game.ragdoll_rules.follow_cvars(link)
 
 	net = DotNetManager.new()
 	net.name = "Net"
@@ -382,6 +419,10 @@ func is_activator() -> bool:
 
 ## A new course. The name, once, big.
 func _on_stage(_stage_id: StringName) -> void:
+	if ragdolls != null:
+		# A body on the old course would hang in the new one's air.
+		ragdolls.clear()
+
 	if game.stage == null:
 		return
 
@@ -617,6 +658,8 @@ func _hear_phase(phase: int) -> void:
 
 
 func _hear_death(who: DrPlayer, why: StringName) -> void:
+	_fall(who)
+
 	if audio == null or who == null:
 		return
 

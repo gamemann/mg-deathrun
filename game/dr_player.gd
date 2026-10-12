@@ -105,6 +105,10 @@ var beacon_marker: DotFxBeacon = null
 ## What other people see this player as. Client side.
 var figure: DrFigure = null
 
+## How this player's body falls on their death: the server's pick ([method DrGame.decide_death]),
+## carried on DEATH and set here before anybody hears of it. Null before a first death.
+var death: DotPlayerDeath = null
+
 # --- What a watcher draws in their hand. Client side --------------------------
 #
 # A player this process SIMULATES (an offline stand-in, or yourself in third person) is read

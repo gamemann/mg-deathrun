@@ -5,6 +5,7 @@ const DrConfig := preload("../game/dr_config.gd")
 const DrCourse := preload("../game/dr_course.gd")
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrClient := preload("../game/dr_client.gd")
+const DrEvents := preload("../game/net/dr_events.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrHud := preload("../game/dr_hud.gd")
 const DrPaths := preload("../game/dr_paths.gd")
@@ -23,7 +24,7 @@ const DrProgress := preload("../game/dr_progress.gd")
 
 const SECTIONS := 24
 
-const CHECKS := 103
+const CHECKS := 107
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -181,6 +182,19 @@ func _test_the_wire() -> void:
 
 	var torn := bytes.slice(0, bytes.size() / 2)
 	_check(not DrCourseDoc.decode(torn).ok, "half of it is refused, not built")
+
+	# A death carries how the body falls (dot-player-char's DotPlayerDeath), last and optional.
+	var fall := DotPlayerDeath.new()
+	fall.reaction = &"face_plant"
+	fall.roll_seed = 1234
+	fall.damage = 100.0
+	fall.direction = Vector3(1, 0, 0)
+	var died := DrEvents.read_death(DotNetReader.new(DrEvents.write_death(5, 6, DrGame.DIED_SHOT, fall)))
+	var carried: DotPlayerDeath = died.get("death")
+	_check(bool(died["ok"]) and carried != null and carried.reaction == &"face_plant" and carried.roll_seed == 1234
+		and carried.direction.distance_to(Vector3(1, 0, 0)) < 0.02, "a DEATH carries the fall the server picked")
+	var bare := DrEvents.read_death(DotNetReader.new(DrEvents.write_death(5, 6, DrGame.DIED_SHOT)))
+	_check(bool(bare["ok"]) and not bare.has("death"), "and one without a fall still reads")
 	_finished()
 
 
@@ -406,11 +420,27 @@ func _test_the_trapdoor() -> void:
 	_check(victim.is_alive() and absf(victim.controller.state.position.y) < 0.3,
 		"before the press it is a floor", str(victim.controller.state.position))
 
+	# Drawn while alive, as a client draws everybody it can see: the body is copied from this.
+	var _drawn := victim.present_body(false, victim.controller.state.position, Color.WHITE)
 	await _press(game, activator, 0)
 	await _step(game, TICK_RATE * 2)
 	_check(not victim.is_alive(), "after it, the one on it is gone", str(victim.controller.state.position))
 	_check(bystander.is_alive(), "and the one beside it is not")
 	_check(_died(deaths, victim.player_id, activator.player_id), "it is the activator's kill", str(deaths))
+
+	# How the body falls: the server picked it, and a client draws it from the figure.
+	_check(victim.death != null and DotPlayerDeathReactions.stock().has(victim.death.reaction),
+		"the server picked how the body falls", str(victim.death.describe()) if victim.death != null else "none")
+	var client := DrClient.new()
+	client.game = game
+	client._build_ragdolls()
+	client.remove_child(client.ragdolls)
+	add_child(client.ragdolls)
+	client._fall(victim)
+	_check(client.ragdolls.live().size() == 1 and client.ragdolls.rules == game.ragdoll_rules,
+		"and a client builds the body from the figure it draws, under the game's rules")
+	client.ragdolls.queue_free()
+	client.free()
 	_finished()
 
 
