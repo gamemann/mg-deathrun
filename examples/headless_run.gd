@@ -25,7 +25,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 27
 
-const CHECKS := 121
+const CHECKS := 123
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -576,6 +576,28 @@ func _test_the_end() -> void:
 	await _step(game, 2)
 	activator.wants_use = false
 	_check(fired.is_empty(), "an activator at the end presses nothing")
+
+	# A stand-in's fight is dot-bot's aim: no shot on the tick it first looks, and a preset that
+	# reacts faster fires sooner (bot_reaction).
+	var first_shot := {}
+	for preset in ["easy", "nightmare"]:
+		var _p := DotBotSettings.of(game).set_difficulty(preset)
+		game._bot_hands.erase(activator.player_id)
+		var tick_of := -1
+		for t in range(int(2.0 * TICK_RATE)):
+			var cmd := DotFpsCommand.new()
+			cmd.yaw = activator.controller.state.yaw
+			game._tick += 1
+			game._aim_bot(activator, cmd, runner)
+			if cmd.is_pressed(DotFpsCommand.BUTTON_USER_0):
+				tick_of = t
+				break
+		first_shot[preset] = tick_of
+	var _back := DotBotSettings.of(game).set_difficulty("medium")
+	_check(int(first_shot["easy"]) > 0 and int(first_shot["nightmare"]) > 0,
+		"a stand-in does not fire on the tick it first aims", str(first_shot))
+	_check(int(first_shot["nightmare"]) < int(first_shot["easy"]),
+		"and a nightmare one fires sooner than an easy one", str(first_shot))
 	_finished()
 
 

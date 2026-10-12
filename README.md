@@ -77,15 +77,16 @@ dr_activator_repeat 0          // 1 = last round's activator may be drawn again
 dr_timeout_winner 2            // who wins when the clock runs out: 0 draw, 1 runners, 2 activators
 dr_activator_health 1.5        // how much tougher activators are at the end
 dr_autobhop 0                  // 1 = hold jump to keep hopping
-dr_bot_trap_delay 0.25         // how late bot activators press, in seconds
+dr_bot_trap_delay 0.25         // how late bot activators press, in seconds (at bot_difficulty medium; scaled by bot_reaction)
 mp_teammate_passthrough 1      // shots and team-mates: 0 a team-mate is hit and blocks, 1 through one at the muzzle, 2 through every team-mate
 bot_quota 3                    // players a round is kept at with bots; each person who joins replaces one
 bot_quota_mode fill            // fill (as above), fixed (that many bots), per_player (that many per person) or off
 dr_bots 1                      // 0 = no bots
+bot_difficulty medium          // easy, medium, hard or nightmare: how bots aim, react and fire at the end (every bot_* setting is a cvar too)
 dr_vote_after 20               // seconds into a course before the vote for the next one opens
 ```
 
-The bot cvars are the family's shared ones (dot-server's `DotBotQuota`). `dr_min_players` still works and sets `bot_quota`; it is deprecated.
+The bot cvars are the family's shared ones (dot-server's `DotBotQuota`, dot-bot's `bot_difficulty` and `bot_*`; solo they are console variables, or `-- --bot_difficulty hard` at launch). `dr_min_players` still works and sets `bot_quota`, and `dr_bot_spread` sets `bot_aim_error`; both are deprecated.
 
 Dead runners fall as ragdolls ([dot-player-char](https://github.com/modcommunity/dot-player-char)); the server picks how each one goes down and everybody sees the same fall. `sv_ragdoll 0` makes it a quick fall with no physics, `sv_ragdoll_style` picks ragdoll, stiff, topple or hide, `sv_ragdoll_time` and `sv_ragdoll_max` say how long and how many, and `sv_ragdoll_reactions` weights the falls (`limp`, `face_plant`, `crumple`, `headshot_launch`, `power_launch`; 0 turns one off).
 

@@ -206,6 +206,10 @@ func _game_load() -> DotResult:
 	# stays the switch it always was, so a server config that sets it means what it meant.
 	_quota = DotBotQuota.install(self, world.config.minimum_players)
 
+	# How well the stand-ins fight and react: dot-bot's `bot_difficulty` and its `bot_*`
+	# settings, on the world (`DrGame._aim_bot`, the activator's press).
+	var _bot_cvars := DotBotSettings.of(world).bind_cvars(add_cvar, DotConVar.FLAG_NOTIFY, add_command)
+
 	# [b]Started here and not in the world's own `_ready`.[/b] `start()` builds the course and
 	# puts everybody on it, and a world that did that before the bridge existed would have
 	# built a course with nothing listening to `world_rebuilt` — one the server knows about
@@ -353,9 +357,13 @@ func _add_tunables(world: DrGame) -> void:
 			config.auto_bunny_hop = value > 0.5
 			for id: StringName in world.players:
 				(world.players[id] as DrPlayer).retune())
+	# Deprecated: a stand-in's aim is dot-bot's now (`bot_difficulty`, `bot_aim_error`). Kept so a
+	# config that sets it still means something: it sets `bot_aim_error`.
 	_tunable("dr_bot_spread", config.bot_aim_spread_degrees,
-		"How far a stand-in's aim is off, in degrees, per bot per round",
-		func(value: float) -> void: config.bot_aim_spread_degrees = clampf(value, 0.0, 45.0))
+		"Deprecated, sets bot_aim_error: degrees a stand-in's first shots are off",
+		func(value: float) -> void:
+			config.bot_aim_spread_degrees = clampf(value, 0.0, 45.0)
+			var _set := DotBotSettings.of(world).set_value("aim_error", str(config.bot_aim_spread_degrees)))
 	_tunable("dr_bot_fumble", config.bot_fumble_chance,
 		"Chance in a hundred a stand-in runner misses a jump",
 		func(value: float) -> void: config.bot_fumble_chance = clampf(value, 0.0, 100.0))

@@ -197,7 +197,8 @@ extends DotConfig
 ## at them — or the activator, with somebody to press them at.
 @export_range(0, 24, 1) var minimum_players: int = 3
 
-## How far a stand-in's aim is off, in degrees, drawn once per bot per round.
+## Deprecated: what `dr_bot_spread` last set `bot_aim_error` to. A stand-in's aim is dot-bot's
+## ([DotBotAim] on `bot_difficulty`); nothing reads this but the alias.
 @export_range(0.0, 45.0, 0.5) var bot_aim_spread_degrees: float = 7.0
 
 ## How likely a stand-in runner is to mistime a jump, in a hundred.

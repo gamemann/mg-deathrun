@@ -246,6 +246,18 @@ func _start_offline() -> void:
 	_adopt(game.add_player(&"local", "You", 0, true))
 	_hear_the_world()
 
+	# How well they play: `bot_difficulty` and every `bot_*` at the console, or
+	# `-- --bot_difficulty <preset>` at launch; the settings a server binds as cvars.
+	var skill := DotBotSettings.of(game)
+	var args := OS.get_cmdline_user_args()
+	var at := args.find("--bot_difficulty")
+	if at >= 0 and at + 1 < args.size():
+		DotLog.result(CHANNEL, "bot difficulty from the command line", skill.set_difficulty(args[at + 1]))
+	if console != null:
+		var local := DotConsoleLocal.new()
+		console.add_source(local)
+		var _bound := skill.bind_console(local)
+
 	# Offline the world counts for the player at this keyboard, so it is the world that says
 	# what they earned. Connected, the same line arrives as a notice from the server.
 	game.achievement_earned.connect(func(id: StringName, title: String, points: int) -> void:

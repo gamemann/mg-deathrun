@@ -1806,8 +1806,15 @@ func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
 	_bot_watch[player.player_id] = since
 
 	# Released and pressed again, so the server sees an edge every other tick it is wanted.
-	player.wants_use = _tick - since >= int(config.bot_trap_delay * float(tick_rate)) \
+	# The operator's delay, scaled by how quickly this preset reacts (`bot_reaction` against
+	# medium's): medium presses exactly when it always did, easy later, nightmare sooner.
+	var reacts := DotBotSettings.of(self).profile.reaction / _MEDIUM_BOT.reaction
+	player.wants_use = _tick - since >= int(config.bot_trap_delay * reacts * float(tick_rate)) \
 		and not player.wants_use
+
+
+## The preset the bots' numbers are taken relative to, so medium plays as before presets.
+static var _MEDIUM_BOT: DotBotProfile = DotBotProfile.new()
 
 
 ## The ready trap the nearest live runner is closest to reaching.
@@ -1881,27 +1888,33 @@ func _nearest_enemy(player: DrPlayer) -> DrPlayer:
 	return best
 
 
+## Aims a stand-in at [param target] the way a person does and says whether it fires this
+## tick: dot-bot's [DotBotAim] on this game's `bot_difficulty`, so the view turns at
+## `bot_turn_rate`, the first shots miss by `bot_aim_error` and settle, and the trigger waits
+## `bot_reaction` after first sight. It used to snap onto the target on the first tick and hold
+## the trigger, off by one random `dr_bot_spread` per round.
+##
+## [b]Seeded per bot and per round[/b], so an empty server does not play the same fight every
+## round (mg-smash-copter's finding).
 func _aim_bot(player: DrPlayer, command: DotFpsCommand, target: DrPlayer) -> void:
-	var toward := target.eye_position() - player.eye_position()
+	var aim: DotBotAim = _bot_hands.get(player.player_id)
 
-	if toward.length() < 0.01:
-		return
+	if aim == null:
+		aim = DotBotAim.new(round_number * 8192 + int(player.entity_id % 8192), DotBotSettings.of(self))
+		aim.view_from(command.yaw, command.pitch)
+		_bot_hands[player.player_id] = aim
 
-	# A hand of its own per bot per round, with the round mixed into the subject: without it
-	# mg-smash-copter's empty server played the same fight twelve times out of twelve.
-	var hand: Variant = _bot_hands.get(player.player_id)
-
-	if hand == null:
-		var draw := random.stream_for(&"bot_aim", round_number * 8192 + int(player.entity_id % 8192))
-		var spread := config.bot_aim_spread_degrees
-		hand = Vector2(draw.next_range_f(-spread, spread), draw.next_range_f(-spread * 0.4, spread * 0.4))
-		_bot_hands[player.player_id] = hand
-
-	command.yaw = rad_to_deg(atan2(-toward.x, -toward.z)) + (hand as Vector2).x
-	command.pitch = clampf(
-		rad_to_deg(asin(clampf(toward.normalized().y, -1.0, 1.0))) + (hand as Vector2).y, -89.0, 89.0
-	)
-	command.set_button(DotFpsCommand.BUTTON_USER_0, true)
+	var eye := player.eye_position()
+	var at := target.controller.state.position + Vector3(0.0, 1.25, 0.0)
+	var now := float(_tick) / float(maxi(tick_rate, 1))
+	var _new := aim.engage(target.entity_id, eye, at, now)
+	var view := aim.track(eye, at, target.controller.state.velocity, now, 1.0 / float(maxi(tick_rate, 1)))
+	command.yaw = view.x
+	command.pitch = clampf(view.y, -89.0, 89.0)
+	var fire := aim.trigger(now, eye.distance_to(at))
+	if fire:
+		aim.note_shot(eye, at, now)
+	command.set_button(DotFpsCommand.BUTTON_USER_0, fire)
 
 
 # --- Reacting ---------------------------------------------------------------

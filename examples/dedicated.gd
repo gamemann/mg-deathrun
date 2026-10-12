@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 10
-const CHECKS := 58
+const CHECKS := 60
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -258,6 +258,13 @@ func _test_a_round_runs() -> void:
 	var quota_bridge: Object = quota_module.get("bridge") if quota_module != null else null
 	_check(server.console.find_cvar("bot_quota") != null and server.console.find_cvar("bot_quota_mode") != null,
 		"the shared bot_quota cvars are registered")
+	var picked := _run_command("bot_difficulty hard")
+	var bots_skill := DotBotSettings.of(quota_module.get("game")) if quota_module != null else null
+	_check(bots_skill != null and bots_skill.difficulty() == "hard", "bot_difficulty is a cvar, and reaches the world the stand-ins play from", str(picked))
+	var _spread := _run_command("dr_bot_spread 3")
+	_check(bots_skill != null and is_equal_approx(bots_skill.profile.aim_error, 3.0), "and the old dr_bot_spread sets bot_aim_error")
+	var _reset := _run_command("bot_settings_reset")
+	var _medium := _run_command("bot_difficulty medium")
 	var _alias := _run_command("dr_min_players 3")
 	_check(server.console.find_cvar("bot_quota") != null and server.console.find_cvar("bot_quota").get_int() == 3,
 		"and the old dr_min_players sets bot_quota",
