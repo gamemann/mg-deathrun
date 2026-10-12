@@ -1,5 +1,6 @@
 extends Node
 
+const DrBindings := preload("dr_bindings.gd")
 const DrAudio := preload("dr_audio.gd")
 const DrFigure := preload("dr_figure.gd")
 const DrSettings := preload("dr_settings.gd")
@@ -41,10 +42,8 @@ const LINK_SERVICE := &"dot_client_link"
 const CHASE_BACK := 4.6
 const CHASE_UP := 2.1
 
-## Which key swaps the camera over. Physical, because the letter differs across layouts.
-const VIEW_KEY := KEY_F5
-
-## The key that presses a trap's button, held and sent every tick. The HUD names it.
+## The use key's default, for a HUD with no table to ask ([DrBindings] is what the client
+## reads). The HUD names the key as bound ([member DrHud.use_action]).
 const USE_KEY := KEY_E
 
 @export var config_file: String = "user://cfg/deathrun.json"
@@ -400,7 +399,7 @@ func _on_phase(phase: int) -> void:
 			_disarm_locally()
 
 			if is_activator():
-				hud.shout("YOU ARE THE ACTIVATOR — %s presses a button" % DrHud.key_text(USE_KEY), 3.5)
+				hud.shout("YOU ARE THE ACTIVATOR — %s presses a button" % hud.use_label(), 3.5)
 			else:
 				hud.shout("RUN — the gate drops soon", 2.5)
 		DrGame.Phase.RUN:
@@ -834,6 +833,7 @@ func _build_hud() -> void:
 	hud = DrHud.new()
 	hud.name = "Hud"
 	hud.use_key = USE_KEY
+	hud.use_action = DrBindings.USE
 	add_child(hud)
 
 
@@ -1400,7 +1400,7 @@ static func drawn_position(body: DrPlayer, remote: bool) -> Vector3:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# The Tab board, held: shown while the key is down.
-	if event is InputEventKey and (event as InputEventKey).physical_keycode == KEY_TAB and not event.is_echo():
+	if event.is_action(DrBindings.SCOREBOARD) and not event.is_echo():
 		_show_board(event.is_pressed())
 		return
 
@@ -1423,10 +1423,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			settings.open()
 		return
 
-	if event is InputEventKey and (event as InputEventKey).pressed:
-		var key := event as InputEventKey
-
-		if key.physical_keycode == VIEW_KEY:
+	# The game's keys, each a row of [DrBindings] read through its action, so a key moved on
+	# the Controls page moves what it does here.
+	if event is InputEventKey:
+		if event.is_action_pressed(DrBindings.VIEW):
 			# Out, the key swaps the SPECTATOR's camera, which the server decides.
 			if is_spectating():
 				spectate_step(0)
@@ -1435,27 +1435,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 
 		# The slots. One to five, which is what the pack uses.
-		if key.physical_keycode >= KEY_1 and key.physical_keycode <= KEY_5:
-			_slot = key.physical_keycode - KEY_1 + 1
+		for i in range(DrBindings.SLOTS.size()):
+			if event.is_action_pressed(DrBindings.SLOTS[i]):
+				_slot = i + 1
+				return
+
+		if event.is_action(DrBindings.RELOAD):
+			_reloading = event.is_pressed()
 			return
 
-		if key.physical_keycode == KEY_R:
-			_reloading = true
-			return
-
-		if key.physical_keycode == USE_KEY:
+		if event.is_action(DrBindings.USE):
 			# Held, and sent every tick in this game's own input message; the server makes the
 			# edge. A request instead would be a press resolved a round trip after the key,
 			# against a runner who has left the trap.
-			_use = true
+			_use = event.is_pressed()
 			return
-
-	if event is InputEventKey and not (event as InputEventKey).pressed:
-		if (event as InputEventKey).physical_keycode == KEY_R:
-			_reloading = false
-
-		if (event as InputEventKey).physical_keycode == USE_KEY:
-			_use = false
 
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton

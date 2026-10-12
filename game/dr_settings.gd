@@ -1,5 +1,7 @@
 extends DotMenuSettings
 
+const DrBindings := preload("dr_bindings.gd")
+
 ## A player's own settings and the menu that changes them: how fast the view turns, how wide
 ## it is, how loud things are, the window, and the look of the menu itself.
 ##
@@ -48,9 +50,10 @@ func _init() -> void:
 	schema = schema_for()
 	config = DotMenuConfig.new()
 	config.brand_name = "Deathrun"
-	# Nothing to leave to and no keys table to help with; Escape and Resume close the menu.
-	config.show_help = false
-	config.show_leave = false
+	# Help and Leave are dot-menu's stock: H opens help, Leave leaves the server or quits a
+	# solo game. Every game in the family has both (the first play test found this one without
+	# them). The keys are a table now ([DrBindings]), so the help screen lists them.
+	bindings = DrBindings.make()
 	var _layered := config.load_layered()
 
 
@@ -63,3 +66,11 @@ static func schema_for() -> DotSettingsSchema:
 		DotSettingsDef.Scope.SERVER_CLAMPED
 	))
 	return DotMenuStock.declare(s, DotMenuStock.DEFAULT_GROUPS, null, NOT_APPLIED)
+
+
+## The help screen's goal and rules; the keys come from [DrBindings].
+func _fill_help(help: DotMenuHelp) -> void:
+	help.about = "One long course of traps. Most players run it; one or more activators, drawn fresh each round, stand on a walkway beside it with a button for every trap. Runners try to reach the end; activators try to catch them in the traps."
+	help.add_text("Activators", "Stand at a button and press the use key while a runner is in its trap. Each trap shows its name when you look at its button.")
+	help.add_text("The end", "Whoever reaches the end is handed a weapon, and the first one there calls the activators down to settle it.")
+	help.add_section("Mouse", [["Left", "Fire, at the end; watch the next player while out"], ["Right", "Alternate fire; watch the one before while out"]], &"keys")

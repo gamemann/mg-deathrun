@@ -40,6 +40,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 ## Rules
 
 **Traps** ([traps](docs/traps.md))
+- **Every key is a `DrBindings` row read through its action**, never a keycode (Escape excepted); the HUD names the use key as bound (`DrHud.use_label`). H is help (dot-menu's stock key; `DrSettings._fill_help`), so no row may default to H. `headless_run` checks it and the Escape menu's Help and Leave.
 - The only thing about a trap that travels is `TRAP` (index, the PRESS's tick). Never start a trap's clock on arrival.
 - Lethal parts are measured (`lethal_at`), never collided; solid moving parts carry by exact displacement inside the player's tick. A death is the server's, sent as an event, never predicted.
 - Moving parts are static bodies teleported through the physics server, never kinematic (a step late) or rigid; `headless_courses` relies on that to skip physics frames.

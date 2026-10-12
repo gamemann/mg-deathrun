@@ -39,6 +39,10 @@ var prompt: DotKeyPrompt = null
 ## and the phase line name the key the client actually reads.
 var use_key: Key = KEY_E
 
+## The use key's action (`DrBindings.USE`): named as the player has it bound, once a table has
+## put it on the InputMap; [member use_key] until then.
+var use_action: StringName = &""
+
 ## What a player who is out is looking at, and the keys that change it. Empty while playing.
 var watching_label: Label = null
 var _bar_back: ColorRect = null
@@ -92,6 +96,15 @@ static var _spent: Theme = null
 
 
 ## A key's name as the family writes a binding ("E").
+## The use key as the player has it bound.
+func use_label() -> String:
+	if use_action != &"" and InputMap.has_action(use_action):
+		var text := DotInputBinding.describe_action(use_action)
+		if text != DotInputBinding.UNBOUND:
+			return text
+	return key_text(use_key)
+
+
 static func key_text(physical: Key) -> String:
 	var event := InputEventKey.new()
 	event.physical_keycode = physical
@@ -354,7 +367,7 @@ func _phase_line() -> String:
 			if player != null and player.watching:
 				return "you joined mid-round — watching"
 			if activator:
-				return "press %s at a button while they are in its trap" % key_text(use_key)
+				return "press %s at a button while they are in its trap" % use_label()
 			return "%.1f s" % game.run_elapsed
 		DrGame.Phase.SHOWDOWN:
 			if player != null and player.at_end:
@@ -375,7 +388,7 @@ func _draw_traps(side: int) -> void:
 		prompt.clear()
 	elif game.stage.trap_ready(looking, game.current_tick()):
 		prompt.theme = null
-		prompt.show_prompt(game.stage.trap_name(looking), key_text(use_key))
+		prompt.show_prompt(game.stage.trap_name(looking), use_label())
 	else:
 		if _spent == null:
 			_spent = spent_theme()

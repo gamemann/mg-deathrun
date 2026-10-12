@@ -11,6 +11,7 @@ const DrHud := preload("../game/dr_hud.gd")
 const DrPaths := preload("../game/dr_paths.gd")
 const DrPlayer := preload("../game/dr_player.gd")
 const DrProgress := preload("../game/dr_progress.gd")
+const DrSettings := preload("../game/dr_settings.gd")
 
 ## The simulation, headless: documents, the trap timeline, the draw, the buttons, every shape
 ## of trap killing somebody, the end, and how a round is decided.
@@ -22,9 +23,9 @@ const DrProgress := preload("../game/dr_progress.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 24
+const SECTIONS := 25
 
-const CHECKS := 107
+const CHECKS := 112
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -71,6 +72,7 @@ func _run() -> void:
 	await _test_side_choice()
 	await _test_the_client_settings()
 	await _test_the_hud()
+	await _test_help_and_menu()
 
 	for world in _worlds.duplicate():
 		await _dispose(world)
@@ -991,6 +993,36 @@ func _test_the_hud() -> void:
 		str(asks.get("dot_ui"))
 	)
 	hud.queue_free()
+	_finished()
+
+
+## The family's rule since the first play test: H opens help in every game, nothing else in
+## the table is on H, and the Escape menu has Help & commands and Leave.
+func _test_help_and_menu() -> void:
+	_section("H opens help, and the Escape menu has Help and Leave")
+	var settings := DrSettings.new()
+	add_child(settings)
+	var built: DotResult = settings.setup(DotSettingsStoreMemory.new())
+	var keys: DotMenuBindings = settings.bindings
+	_check(built.ok and keys != null and keys.key_for(DotMenuBindings.HELP_ACTION) == "H", "help is on H")
+	_check(keys.defaults_on("H").size() == 1, "and nothing else in the table defaults to H",
+		str(keys.defaults_on("H").map(func(r: Dictionary) -> String: return str(r["label"]))))
+	var h := InputEventKey.new()
+	h.physical_keycode = KEY_H
+	h.keycode = KEY_H
+	h.pressed = true
+	_check(settings.menu.handle_event(h) and settings.menu.help.is_open(), "H opens the help screen")
+	_check(settings.menu.help.about != "" and settings.menu.help.heading() == "How to play Deathrun",
+		"which says what the game is before the keys")
+	settings.menu.help.close()
+	settings.open()
+	var help_button := settings.menu.screen.find_child("Action_help", true, false) as Button
+	var leave_button := settings.menu.screen.find_child("Action_leave", true, false) as Button
+	_check(help_button != null and leave_button != null and leave_button.visible,
+		"the Escape menu has Help & commands and Leave")
+	settings.close()
+	settings.queue_free()
+	await get_tree().process_frame
 	_finished()
 
 
