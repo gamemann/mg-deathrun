@@ -152,6 +152,12 @@ var ragdoll_rules: DotPlayerRagdollRules = DotPlayerRagdollRules.new()
 var view_rules: DotPlayerViewRules = DotPlayerViewRules.new()
 var body_rules: DotPlayerBodyRules = DotPlayerBodyRules.new()
 
+
+func _init() -> void:
+	# This game's pick: runners pass through each other (see `_build_physics`). An owner who
+	# wants bodies sets `mp_solidplayers 1`.
+	body_rules.solid = false
+
 ## The weapon definitions by id, for the death reaction a weapon asks for. Built on first use.
 var _weapon_defs: Dictionary = {}
 var effects: DotFxManager = null
@@ -270,11 +276,11 @@ func _exit_tree() -> void:
 
 # --- Building ---------------------------------------------------------------
 
-## The named collision layers: the world and the players.
 ## The player's motor mask under `mp_solidplayers`, and the standing hull the others stop at
 ## (a player's body has no shape of its own). Through `apply_to`: `set_collision_mask`, which
-## a style does not undo, and the players' layer as one a player may walk out of. With the rule on, a stand-in stops at
-## your shoulder instead of walking through your face (the first play test).
+## a style does not undo, and the players' layer as one a player may walk out of. With the rule
+## on, a stand-in stops at your shoulder instead of walking through your face (the first
+## play test).
 func _apply_body_mask(player: DrPlayer) -> void:
 	if physics == null or player == null or player.controller == null:
 		return
@@ -289,6 +295,7 @@ func _on_body_rules_changed() -> void:
 		_apply_body_mask(players[id] as DrPlayer)
 
 
+## The named collision layers: the world and the players.
 func _build_physics() -> void:
 	physics = DotPhysicsLayout.custom(&"deathrun", [&"world", &"player"])
 
@@ -297,7 +304,9 @@ func _build_physics() -> void:
 			&"player":
 				# Not other players. Two runners shoving on a ledge is a race decided by who
 				# walked into whom, drawn in the past on every client — and on a course where a
-				# shove is a death, it would be the deadliest thing on it.
+				# shove is a death, it would be the deadliest thing on it. So `mp_solidplayers`
+				# is 0 by default here (see `body_rules`); the camera fade keeps a runner who
+				# walks through you out of the lens.
 				layer.collides_with = [&"world"]
 			_:
 				layer.collides_with = [&"player"]
