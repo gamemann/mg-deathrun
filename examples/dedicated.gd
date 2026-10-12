@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 10
-const CHECKS := 55
+const CHECKS := 58
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -338,6 +338,30 @@ func _test_the_course_vote() -> void:
 		ids.append(String(choice.id))
 
 	_check(ids.has("dr_ice_works") and ids.has("dr_foundry"), "it offers the delivered courses", str(ids))
+
+	# The map menu's server half (M): the owner's flag changes the course now, anybody else
+	# gets a nomination and a rock-the-vote. Contexts as dot-server makes them for a chat line.
+	var menu_half: Object = vote.get("commands").get("map_menu")
+	_check(menu_half != null and server.console.find_command("mapmenu") != null
+		and server.console.find_cvar("sv_map_menu_flag").get_string() == "generic"
+		and (menu_half.get("change_fn") as Callable).is_valid(),
+		"the map menu is there, staff-only by default, changing the course now")
+	var staff := DotCmdContext.new()
+	staff.source = DotCmdContext.Source.CHAT
+	staff.permissions = PackedStringArray(["generic"])
+	var player := DotCmdContext.new()
+	player.source = DotCmdContext.Source.CHAT
+	var offered: Dictionary = menu_half.call("offer", player)
+	_check((offered["maps"] as Array).size() > 1 and not bool(offered["allowed"]) and bool(offered["vote"]),
+		"a player is offered every course, as a vote")
+	var target: StringName = &""
+	for row: Dictionary in offered["maps"]:
+		if not bool(row["current"]):
+			target = StringName(str(row["id"]))
+			break
+	var changed: Dictionary = await menu_half.call("choose", staff, target)
+	_check(bool(changed["ok"]) and game.stage.id() == target, "staff choosing one changes the course on the spot",
+		"%s: %s" % [target, changed.get("text", "")])
 
 	vote.set("voters_fn", func() -> Array: return [&"7"])
 	var director: DotVoteDirector = vote.get("director")
