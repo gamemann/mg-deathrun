@@ -7,6 +7,8 @@ const DrEvents := preload("../game/net/dr_events.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrNetBridge := preload("../game/net/dr_net_bridge.gd")
 const DrPlayer := preload("../game/dr_player.gd")
+const DrEvent := preload("../game/net/dr_event.gd")
+const DrRequest := preload("../game/net/dr_request.gd")
 
 ## The real path minus the socket: two worlds, two managers, two bridges, two links with the
 ## RPC replaced by a queue — so the codec, the seal, the snapshots, the prediction and the
@@ -24,7 +26,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
 const SECTIONS := 9
-const CHECKS := 40
+const CHECKS := 43
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -135,6 +137,16 @@ func _test_the_codec() -> void:
 	_check(bool(clock["ok"]) and int(clock["phase"]) == DrGame.Phase.SHOWDOWN
 		and absf(float(clock["run_elapsed"]) - 40.25) < 0.1 and int(clock["runners"]) == 3
 		and int(clock["activators"]) == 1, "CLOCK", str(clock))
+
+	# A kind goes out in a fixed field the writer masks without a word, so one past it aliases a
+	# smaller kind: game-zombie-zone sent HURT and AMMO as HELLO and MAP that way.
+	_check(DrEvent.fits(), "every event kind fits the event's kind field",
+		"%d kinds in %d bits" % [DrEvents.Kind.size(), DrEvent.KIND_BITS])
+	_check(DrRequest.fits(), "every request kind fits the request's kind field",
+		"%d kinds in %d bits" % [DrEvents.Ask.size(), DrRequest.KIND_BITS])
+	_check(DrEvents.chat_kinds_fit(), "every chat kind fits the chat line's kind field",
+		"%d kinds in %d bits" % [DotChatMessage.KIND_NAMES.size(), DrEvents.CHAT_KIND_BITS])
+
 	_finished()
 
 
