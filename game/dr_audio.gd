@@ -81,14 +81,17 @@ const COURSE_SOUND := {
 
 
 static func ids() -> Array[StringName]:
-	return [
+	var out: Array[StringName] = [
 		TRAP, TRAP_SAW, TRAP_DROP, TRAP_CRUSH, TRAP_FIRE, TRAP_GRIND, FINISH, COUNTDOWN, GATE, PLAYER_DOWN, YOU_ARE_OUT, ROUND_START, ROUND_END,
 		SHOWDOWN, WEAPON_SHOT, WEAPON_SWING, WEAPON_LAUNCH, WEAPON_BEAM, WEAPON_THROW,
 		UI_CLICK, UI_DENY,
 		# dot-player-char's dead bodies.
 		DotPlayerDeathReactions.SOUND_THUD, DotPlayerDeathReactions.SOUND_FACE_PLANT,
 		DotPlayerDeathReactions.SOUND_SLUMP, DotPlayerDeathReactions.SOUND_WHOOSH,
-	] + DotAudioStock.ids()
+	]
+	# A typed array plus a typed array is an untyped one: appended, not added.
+	out.append_array(DotAudioStock.ids())
+	return out
 
 
 ## Every decision about every noise. The distances are a course's: a trap further back than
