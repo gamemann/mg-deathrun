@@ -51,6 +51,9 @@ const KILLED_BY_COURSE := -2
 ## And for nothing.
 const KILLED_BY_NOTHING := -1
 
+## dot-lighting's contact shade, loaded by path (API 4): see [method _add_contact_shade].
+const CONTACT_SHADE_SCRIPT := "res://addons/dot_lighting/runtime/dot_contact_shade.gd"
+
 ## The height of a button's top, above the floor its `at` names.
 const BUTTON_HEIGHT := 1.05
 
@@ -141,6 +144,7 @@ func build(p_doc: Dictionary) -> DotResult:
 
 	if draw_world:
 		_build_world()
+		_add_contact_shade()
 
 	pose_at_time(0.0)
 	built.emit()
@@ -972,6 +976,34 @@ func _build_markers() -> void:
 ## ([method light_document]), so the family's look (game-arena's built-in maps: a warm sun
 ## with soft shadows, a pale cool fill, filmic tone map, glow) and each course's own sky,
 ## horizon, sun colour and void are one thing rather than two that can disagree.
+## dot-lighting's contact shade (API 4) where the course's still boxes meet: a wall on a deck, a
+## pillar on the floor, the walkway's step down. The Compatibility renderer the client draws has
+## no ambient occlusion, and every wall stood on its deck with no shade at its foot. Only the
+## still, visible, opaque, unpitched `box` pieces: a mover, a turntable and every trap part move
+## (or flip lethal), and the shade is one mesh built here, so it would stay where they were; a
+## ramp is tilted, which the helper's creases do not follow; the gate is see-through and drops.
+## By path, behind the level, so a shell older than the helper draws the course without it.
+func _add_contact_shade() -> void:
+	if DotAddonApi.build_level("dot_lighting") < 4 or not ResourceLoader.exists(CONTACT_SHADE_SCRIPT):
+		return
+	var boxes: Array = []
+	for piece: Dictionary in pieces:
+		var spec: Dictionary = piece["spec"]
+		if str(piece["kind"]) != "box" or bool(piece["moving"]) or not bool(spec.get("visible", true)):
+			continue
+		if (spec.get("tint", Color.WHITE) as Color).a < 1.0:
+			continue
+		boxes.append({"transform": (piece["node"] as Node3D).transform, "size": spec["size"]})
+	if boxes.is_empty():
+		return
+	var shade: Variant = (load(CONTACT_SHADE_SCRIPT) as GDScript).call(&"node", boxes)
+	if shade is MeshInstance3D and (shade as MeshInstance3D).mesh != null:
+		(shade as Node).name = "ContactShade"
+		add_child(shade)
+	elif shade is Node:
+		(shade as Node).free()
+
+
 func _build_world() -> void:
 	var theme: Dictionary = doc.get("theme", {})
 
