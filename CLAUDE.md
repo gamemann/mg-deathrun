@@ -66,6 +66,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - A dead body falls as dot-player-char's ragdoll: the server picks the fall (`DrGame.decide_death`, on `player.death`), it rides DEATH last and optional, and the client copies it from the figure (`DrClient._fall`). `sv_ragdoll*` cvars bound in the module, REPLICATED, followed by the client. See dot-player-char's [docs/ragdolls.md](../dot-player-char/docs/ragdolls.md).
 - Runners do not see activators (`activators_seen` off) except in the showdown.
 - A course's toys are loose only (dot-props, `toys` in the document): pushed by a walk or a trap, shot along the ray without stopping the shot; a client registers every toy mirror on TOYS before its course is built. [design](docs/design.md#toys-loose-ones-only)
+- A round rebuilds the course inside the netcode's own tick, so `DrToyNet.pull` skips a toy out of the tree (dot-net history #30 skips the unregistered entity too); `headless_net` fails on any engine error in its stderr. [testing](docs/testing.md)
 
 **HUD**
 - **The drawn gun is only what the server armed** (`DrClient._give_locally` per `player_armed`/ARMED, never `give_everything`, which left a slot holding whatever was given last), counted by dot-ui's `DotAmmoCounter` bottom right (`DrHud._draw_ammo`), and brought to the server's count after `DRAWN_SETTLE_SEC` quiet (`DrClient.correct_drawn`: owner-only snapshot fields online, the world's rig offline). `headless_run`'s "an armed runner draws the server's gun" is armed.
