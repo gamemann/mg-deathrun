@@ -25,8 +25,8 @@ const DrRequest := preload("../game/net/dr_request.gd")
 ##
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
-const SECTIONS := 9
-const CHECKS := 44
+const SECTIONS := 10
+const CHECKS := 47
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -75,6 +75,7 @@ func _run() -> void:
 		await _test_a_press_agrees()
 		await _test_a_carry_is_predicted()
 		await _test_the_end_crosses()
+		await _test_the_toys_reach_the_client()
 		await _test_leaving()
 
 	print("")
@@ -288,6 +289,27 @@ func _test_the_course_arrives() -> void:
 		and _client_game.stage.trap_count() == _server_game.stage.trap_count(),
 		"every piece and every trap", "%d, %d" % [_client_game.stage.pieces.size(), _client_game.stage.trap_count()])
 	_check(_heard.has("stage"), "and the client said so")
+	_finished()
+
+
+## The course's toys over the wire: paired by index on both ends, frozen copies, and a ball
+## kicked on the server followed on the client.
+func _test_the_toys_reach_the_client() -> void:
+	_section("the course's toys reach the client")
+	await _steps(4)
+	var count := _server_game.stage.toys.count()
+	_check(count > 0 and _server_bridge.toy_count() == count and _client_bridge.toy_count() == count,
+		"every toy is an entity on both ends, paired by index", "%d toys, %d and %d" % [count, _server_bridge.toy_count(), _client_bridge.toy_count()])
+	var server_ball := _server_game.stage.toys.toy(0)
+	var client_ball := _client_game.stage.toys.toy(0)
+	_check(client_ball.body.freeze and not client_ball.authoritative, "the client's are frozen copies")
+	var start := client_ball.body.global_position
+	var _kicked := _server_game.stage.toys.hit(server_ball.body, server_ball.body.global_position, Vector3(-1, 0.2, 0), 2.0)
+	await _steps(60)
+	var apart := client_ball.body.global_position.distance_to(server_ball.body.global_position)
+	_check(client_ball.body.global_position.distance_to(start) > 0.5 and apart < 0.6,
+		"a ball kicked on the server is followed on the client, and rests where the server's did",
+		"%.2f m moved, %.2f m apart" % [client_ball.body.global_position.distance_to(start), apart])
 	_finished()
 
 

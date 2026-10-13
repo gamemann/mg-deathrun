@@ -93,6 +93,14 @@ var _by_collider: Dictionary = {}
 var _posed_tick: int = -2147483648
 var _posed_time: float = -1.0
 
+## The map's toys (dot-props' [DotPropToyBox]): loose ones only on a course (balls,
+## tyres, barrels in the start room and the arena), simulated where [member authoritative], posed from snapshots elsewhere,
+## under the game's `sv_toys*` [member toy_rules]. Set by the game before it builds.
+var toys: DotPropToyBox = null
+var authoritative: bool = true
+var toy_rules: DotPropToyRules = null
+var gravity: float = 20.0
+
 var _gate: StaticBody3D = null
 var _gate_rest: Transform3D = Transform3D.IDENTITY
 
@@ -129,6 +137,7 @@ func build(p_doc: Dictionary) -> DotResult:
 
 	_build_gate()
 	_build_markers()
+	_build_toys()
 
 	if draw_world:
 		_build_world()
@@ -143,6 +152,31 @@ func build(p_doc: Dictionary) -> DotResult:
 	return DotResult.success(self)
 
 
+## The toys, on their own layer: a loose one (a ball, a tyre) on `toy`, which the course and its
+## traps and the other toys stop and a runner never does (they walk through it and push it,
+## `DrGame._advance_toys`): a crusher or a trapdoor sends a ball flying.
+func _build_toys() -> void:
+	toys = DotPropToyBox.new()
+	toys.name = "Toys"
+	toys.authoritative = authoritative
+	toys.draw = draw_world
+	if toy_rules != null:
+		toys.rules = toy_rules
+	toys.gravity = gravity
+	toys.kill_y = kill_height()
+	if physics != null:
+		toys.loose_layer = physics.layer_mask(&"toy")
+		toys.loose_mask = physics.collision_mask(&"toy")
+		toys.solid_layer = physics.layer_mask(&"world")
+		toys.solid_mask = physics.collision_mask(&"world")
+		toys.footprint_layer = physics.layer_mask(&"footprint")
+		toys.aim_mask = physics.layer_mask(&"world") | physics.layer_mask(&"toy")
+	add_child(toys)
+	var built := toys.build(doc.get("toys", []))
+	if not built.ok:
+		DotLog.warn(CHANNEL, "a map's toys would not build", {"map": String(id()), "why": built.error.message})
+
+
 func clear() -> void:
 	for child in get_children():
 		remove_child(child)
@@ -153,6 +187,7 @@ func clear() -> void:
 	fired = PackedInt32Array()
 	_by_collider.clear()
 	doc = {}
+	toys = null
 	_gate = null
 	_posed_tick = -2147483648
 	_posed_time = -1.0

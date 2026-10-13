@@ -74,7 +74,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 4
-	var checks := 5 + courses.size() * (2 + 1 + 2) + traps + spared
+	var checks := 5 + courses.size() * (2 + 1 + 4) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -311,6 +311,32 @@ func _stand_in_the_end(doc: Dictionary) -> void:
 		"a runner across the line stands in the arena", str(runner.controller.state.position))
 	_check(activator.at_end and activator.is_alive() and absf(activator.controller.state.position.y - activator_spot.y) < 0.5,
 		"and so does the activator called down to it", str(activator.controller.state.position))
+
+	# The course's toys (dot-props', loose only): all built, none inside a piece, and after the
+	# seconds this section has run every one still where the course put it.
+	var box := game.stage.toys
+	var placed := (doc.get("toys", []) as Array).size()
+	var stuck: Array = []
+	var space := game.get_world_3d().direct_space_state
+	for toy in box.toys:
+		for child in toy.body.get_children():
+			var shape := child as CollisionShape3D
+			if shape == null or shape.shape == null:
+				continue
+			var query := PhysicsShapeQueryParameters3D.new()
+			query.shape = shape.shape
+			query.transform = shape.global_transform.translated(Vector3(0, 0.05, 0))
+			query.collision_mask = game.physics.layer_mask(&"world")
+			if not space.intersect_shape(query, 1).is_empty():
+				stuck.append("%s %d at %s" % [toy.def["id"], toy.index, toy.global_position.snapped(Vector3.ONE * 0.1)])
+				break
+	_check(box.count() == placed and placed > 0 and box.missing.is_empty() and stuck.is_empty(),
+		"%d toys, every one dot-props', standing clear" % placed, "; ".join(stuck))
+	var strayed: Array = []
+	for toy in box.toys:
+		if toy.body.global_position.distance_to(toy.rest.origin) > 0.6:
+			strayed.append("%s %d to %s" % [toy.def["id"], toy.index, toy.body.global_position.snapped(Vector3.ONE * 0.1)])
+	_check(strayed.is_empty(), "and every toy is still where the course put it", "; ".join(strayed))
 	_finished()
 
 

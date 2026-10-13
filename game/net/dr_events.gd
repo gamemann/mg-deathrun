@@ -48,6 +48,9 @@ enum Kind {
 	TRAP,
 	## Your shot landed: where, whether it killed, whether to the head. To the shooter only.
 	HIT,
+	## The course's toys: its id, then their net ids in toy order (both ends build them in the
+	## same order from the course). After STAGE, and to a joiner after theirs.
+	TOYS,
 }
 
 enum Ask {
@@ -155,6 +158,26 @@ static func read_hello(r: DotNetReader) -> Dictionary:
 ## [b]Opaque here, and checked at the other end.[/b] The client decodes and VALIDATES what it
 ## is sent, so a document this build cannot read is refused with a sentence rather than half
 ## built; this layer only has to carry bytes without cutting them.
+static func write_toys(map_id: StringName, net_ids: PackedInt64Array) -> PackedByteArray:
+	var w := _w()
+	w.write_string(String(map_id), ID_BYTES)
+	w.write_varint(net_ids.size())
+	for id in net_ids:
+		w.write_varint(maxi(int(id), 0))
+	return w.to_bytes()
+
+
+static func read_toys(r: DotNetReader) -> Dictionary:
+	var map_id := StringName(r.read_string(ID_BYTES))
+	var count := r.read_varint()
+	var ids := PackedInt64Array()
+	if count < 0 or count > 256:
+		return {"map_id": map_id, "ids": ids, "ok": false}
+	for i in count:
+		ids.append(r.read_varint())
+	return {"map_id": map_id, "ids": ids, "ok": r.ok()}
+
+
 static func write_stage(encoded: PackedByteArray) -> PackedByteArray:
 	var w := _w()
 	w.write_bytes(encoded)

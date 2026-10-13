@@ -59,3 +59,8 @@ Players pass through each other by default here (`mp_solidplayers 0`, dot-player
 ## Settings
 
 `DrSettings` is dot-menu's `DotMenuSettings` with this game's schema (sensitivity ACCOUNT at the family's 0.022 degrees per unit, field of view SERVER_CLAMPED with default 92, three volumes). Escape opens it; walking is suspended while it is up.
+
+## Toys: loose ones only
+
+A course's `toys` are a few of dot-props' loose toys (a ball in the start room, balls, barrels or a tyre in the end arena; `DrCourse._build_toys`, validated in `DrCourseDoc`). Never a fixed toy: a trampoline or a pad would be a way past a trap, and anything solid would be cover in the showdown. A runner walks through a loose toy and pushes it (`DrGame._advance_toys`); a trap's moving parts are the world, so a crusher or a trapdoor sends a ball flying; an armed runner's shot down the same ray pushes it and goes on to the combat (`_shoot_toys`, dot-props' `shot_along`), whose trace never sees a toy. The warmup's kicks are put home when the first round starts; a new course builds them fresh. Replicated as `net/dr_toy_net.gd` through TOYS after STAGE and to a joiner; a client registers every mirror the moment TOYS arrives and hands each its toy when its course is built, because dot-net stops reading a snapshot at the first entity a client does not know. `sv_toys*` are bound REPLICATED and followed. This game links dot-props for them (`.gitignore`).
+

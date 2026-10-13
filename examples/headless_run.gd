@@ -23,9 +23,9 @@ const DrSettings := preload("../game/dr_settings.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 28
+const SECTIONS := 29
 
-const CHECKS := 128
+const CHECKS := 131
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -63,6 +63,7 @@ func _run() -> void:
 	await _test_the_carry()
 	await _test_a_bot_runs_the_course()
 	await _test_the_end()
+	await _test_toys()
 	await _test_the_traps_win()
 	await _test_the_runners_win()
 	await _test_the_clock()
@@ -599,6 +600,45 @@ func _test_the_end() -> void:
 		"a stand-in does not fire on the tick it first aims", str(first_shot))
 	_check(int(first_shot["nightmare"]) < int(first_shot["easy"]),
 		"and a nightmare one fires sooner than an easy one", str(first_shot))
+	_finished()
+
+
+## dot-props' toys on the practice course: a runner walking into the start's football sends it
+## on; an armed runner's shot sends the arena's beach ball off and the combat's trace sees
+## straight through it, so it is no cover.
+func _test_toys() -> void:
+	_section("the course's toys")
+	var game := await _world()
+	# After the round starts: a start builds the course again, and its toys with it.
+	var players := await _round(game, 2)
+	var box := game.stage.toys
+	_check(box != null and box.count() == 3 and box.missing.is_empty(), "the practice course has its three toys", str(box.describe()) if box != null else "none")
+	var runner := players[0]
+	var ball := box.toy(0)
+	var b0 := ball.body.global_position
+	runner.place_at(b0 + Vector3(-0.4, -0.12, 0.0), 0.0)
+	for _i in range(10):
+		runner.controller.state.velocity = Vector3(5.0, 0.0, 0.0)
+		game._advance_toys(TICK)
+		await get_tree().physics_frame
+	for _i in range(20):
+		await get_tree().physics_frame
+	_check(ball.body.global_position.x > b0.x + 0.3, "a runner walking into the football sends it on", "%.2f m" % (ball.body.global_position.x - b0.x))
+
+	var beach := box.toy(1)
+	var o0 := beach.body.global_position
+	var shot := DotShot.make(&"test", runner.entity_id, game.current_tick(), 0)
+	shot.origin = o0 + Vector3(0.0, 0.0, 5.0)
+	shot.direction = Vector3(0.0, 0.0, -1.0)
+	shot.damage = 25.0
+	shot.max_range = 40.0
+	var through := game.combat.trace.line_of_sight(shot.origin, o0 + Vector3(0.0, 0.0, -2.0))
+	game._shoot_toys(shot)
+	for _i in range(20):
+		await get_tree().physics_frame
+	_check(beach.body.global_position.distance_to(o0) > 0.4 and through,
+		"a shot sends the arena's beach ball off, and the combat's trace sees through it: no cover",
+		"%.2f m, clear %s" % [beach.body.global_position.distance_to(o0), str(through)])
 	_finished()
 
 

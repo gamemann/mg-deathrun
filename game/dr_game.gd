@@ -149,6 +149,10 @@ var physics: DotPhysicsLayout = null
 ## link, because the client draws the bodies. The game's, not the course's.
 var ragdoll_rules: DotPlayerRagdollRules = DotPlayerRagdollRules.new()
 
+## dot-props' `sv_toys*` (whether a course's toys are there, how many simulate at once, how hard a
+## walk pushes one). Bound by the module (REPLICATED) and followed by a client, which draws them.
+var toy_rules: DotPropToyRules = DotPropToyRules.new()
+
 ## dot-player-controller's `mp_forceview` (may a player switch to third person) and
 ## `mp_solidplayers` (do players and stand-ins block each other). Bound by the module
 ## (REPLICATED) and followed by a client through its link: the client places its camera
@@ -301,7 +305,7 @@ func _on_body_rules_changed() -> void:
 
 ## The named collision layers: the world and the players.
 func _build_physics() -> void:
-	physics = DotPhysicsLayout.custom(&"deathrun", [&"world", &"player"])
+	physics = DotPhysicsLayout.custom(&"deathrun", [&"world", &"player", &"toy", &"footprint"])
 
 	for layer in physics.layers:
 		match layer.id:
@@ -312,6 +316,13 @@ func _build_physics() -> void:
 				# is 0 by default here (see `body_rules`); the camera fade keeps a runner who
 				# walks through you out of the lens.
 				layer.collides_with = [&"world"]
+			# A course's loose toy (dot-props'): the course, its traps and the other toys,
+			# never a runner, who walks through it and pushes it (`_advance_toys`).
+			&"toy":
+				layer.collides_with = [&"world", &"toy"]
+			# A toy's footprint, for a walkable mesh's bake only: nothing collides with it.
+			&"footprint":
+				layer.collides_with = []
 			_:
 				layer.collides_with = [&"player"]
 
@@ -350,6 +361,9 @@ func _build_stage() -> void:
 	stage.physics = physics
 	stage.tick_rate = tick_rate
 	stage.draw_world = draw_world
+	stage.authoritative = authoritative
+	stage.toy_rules = toy_rules
+	stage.gravity = config.gravity
 	add_child(stage)
 
 
@@ -807,6 +821,9 @@ func _on_round_started(number: int) -> void:
 	# one of them for nothing. The next course after that.
 	if _course_unplayed and not course_doc.is_empty() and stage.id() == StringName(str(course_doc["id"])):
 		stage.reset_traps()
+		# And the toys home, which a warmup kicked about.
+		if stage.toys != null:
+			stage.toys.reset()
 	else:
 		_lay_out_course()
 
@@ -1456,6 +1473,7 @@ func _advance_weapons() -> void:
 		for shot in outcome.shots:
 			shot.attacker = player.entity_id
 			shot.tick = _tick
+			_shoot_toys(shot)
 			var resolved := combat.resolve_shot(shot)
 			_note_hits(player, resolved)
 
@@ -1528,6 +1546,9 @@ func _step(delta: float) -> void:
 	_advance_grace()
 	_advance_weapons()
 
+	if authoritative:
+		_advance_toys(delta)
+
 	if combat != null:
 		combat.tick(_tick, delta)
 
@@ -1538,6 +1559,36 @@ func _step(delta: float) -> void:
 		return
 
 	match_node.tick(_tick)
+
+
+# --- Toys ----------------------------------------------------------------------
+
+## Everybody against the course's toys, after they moved: a walk into a ball sends it on; then
+## the box's own tick (the awake cap, the lost sent home). Server side.
+func _advance_toys(delta: float) -> void:
+	if stage == null or stage.toys == null or stage.toys.count() == 0:
+		return
+	for id: StringName in players:
+		var player: DrPlayer = players[id]
+		if not player.is_alive() or player.watching:
+			continue
+		var state := player.controller.state
+		var tunables := player.controller.tunables
+		var radius := tunables.radius if tunables != null else 0.35
+		var height := lerpf(tunables.stand_height, tunables.crouch_height, state.crouch_fraction) if tunables != null else 1.8
+		var _pushed := stage.toys.push_from(state.position, state.velocity, radius, height)
+	stage.toys.advance(delta)
+
+
+## An armed runner's shot against the toys: the first one on its ray, nearer than a wall, is
+## pushed (dot-props' `shot_along`). The shot goes on to the combat, whose trace never sees a
+## toy, so a ball is never cover in the arena. Server side.
+func _shoot_toys(shot: DotShot) -> void:
+	if not authoritative or stage == null or stage.toys == null or stage.toys.count() == 0:
+		return
+	var directions: Array = shot.pellets if not shot.pellets.is_empty() else [shot.direction]
+	for raw: Variant in directions:
+		var _pushed := stage.toys.shot_along(shot.origin, raw as Vector3, maxf(shot.max_range, 1.0), shot.damage, physics.layer_mask(&"world"))
 
 
 func delta_for_tick() -> float:

@@ -39,6 +39,7 @@ const MAX_PIECES := 600
 
 ## The most traps, and the most parts one trap may move.
 const MAX_TRAPS := 48
+const MAX_TOYS := 64
 const MAX_PARTS := 32
 
 ## The machinery a trap can sound like, for a mapper who wants to say so (`"sound"`).
@@ -167,6 +168,21 @@ static func validate(source: Dictionary) -> DotResult:
 		checked_traps.append(trap.value)
 
 	doc["traps"] = checked_traps
+
+	# Toys: dot-props' DotPropToyBox placements, `{toy, at, yaw}`. Which ids exist is the
+	# catalogue's to say when the map is built (an unknown one is left out and listed), so a map
+	# with a toy a newer dot-props has still plays on an older server.
+	var toys: Array = []
+	for raw: Variant in doc.get("toys", []):
+		var toy := DotPropToyBox.normal_placement(raw)
+		if toy.is_empty():
+			return _refuse("toy %d is not {toy, at}" % toys.size(), doc)
+		toys.append(toy)
+
+	if toys.size() > MAX_TOYS:
+		return _refuse("%d toys; the most is %d" % [toys.size(), MAX_TOYS], doc)
+
+	doc["toys"] = toys
 
 	var rest := _places(doc)
 
