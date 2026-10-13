@@ -25,8 +25,8 @@ const DrRequest := preload("../game/net/dr_request.gd")
 ##
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
-const SECTIONS := 10
-const CHECKS := 47
+const SECTIONS := 12
+const CHECKS := 53
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -34,6 +34,9 @@ const SERVER_TICK_RATE := 64
 const CLIENT_ENGINE_TICK_RATE := 30
 const SNAPSHOT_RATE := 30
 const INPUT_LEAD := 3
+## A second connected player, who must hear nothing of somebody else's hit.
+const BYSTANDER_PEER := 8
+const BYSTANDER_SESSION := 43
 
 var _passed := 0
 var _failed := 0
@@ -55,6 +58,10 @@ var _tick: int = 0
 
 ## What the client was told, by kind, so a section can ask whether an event arrived.
 var _heard: Dictionary = {}
+## Every HIT the client's bridge emitted: `[point, killed, headshot]`.
+var _hits: Array = []
+## Every event the server sent: `[peer_id, kind]`.
+var _sent_events: Array = []
 
 
 func _ready() -> void:
@@ -224,6 +231,8 @@ func _build() -> bool:
 	_client_bridge.trap_received.connect(func(index: int, tick: int, by: int) -> void:
 		_heard["traps"] = int(_heard.get("traps", 0)) + 1
 		_heard["trap"] = [index, tick, by])
+	_client_bridge.hit_received.connect(func(point: Vector3, killed: bool, headshot: bool) -> void:
+		_hits.append([point, killed, headshot]))
 	_client_bridge.armed_received.connect(func(who: int, weapon: StringName) -> void:
 		_heard["armed_%d" % who] = weapon)
 	_client_bridge.round_changed.connect(func(n: int, began: bool, winner: int, why: String) -> void:
@@ -429,6 +438,11 @@ func _test_the_end_crosses() -> void:
 	)
 
 	await _steps(int(_server_game.config.arrival_grace_seconds * SERVER_TICK_RATE) + 4)
+	_finished()
+
+	await _test_a_hit_is_the_shooters()
+
+	_section("the showdown's result crosses")
 	var damage := DotDamage.make(server_me.entity_id, _stand_in.entity_id, 1000.0, null)
 	damage.tick = _tick
 	var _applied := _server_game.combat.apply_damage(damage)
@@ -437,6 +451,108 @@ func _test_the_end_crosses() -> void:
 		"the runners won, and the client is told", str(_heard.get("round_over")))
 	_check(_heard.has("round_over") and str(_heard["round_over"][2]).contains("activator"),
 		"with the server's own sentence")
+	_finished()
+
+
+## The weapon-feel pass's wire half (`DrGame.hit_landed` → HIT → `hit_received`, and the owner-only
+## magazine and reserve that `DrClient.correct_drawn` adopts). `headless_run` only proves the
+## offline half, where the world's own signal flashes the marker and nothing crosses. Armed: with
+## the bridge's HIT send removed the first check fails; sent with `_broadcast` the second does.
+func _test_a_hit_is_the_shooters() -> void:
+	_section("a shot that lands is told to the shooter alone, and the drawn gun takes the server's count")
+	var server_me: DrPlayer = _server_game.players[DrNetBridge.player_key(SESSION)]
+	# A second connected player, READY, so a HIT that went to everybody would reach somebody.
+	var _seated := _server_bridge.add_player(BYSTANDER_PEER, BYSTANDER_SESSION, "Bo")
+	_server_bridge._admit(BYSTANDER_PEER)
+	await _steps(2)
+
+	# Point-blank, straight down the aim: the stand-in three metres in front of the shooter's eye.
+	var aim := DotWeaponCommand.new()
+	aim.yaw = 0.0
+	aim.pitch = 0.0
+	var ahead := aim.aim_direction()
+	_stand_in.place_at(server_me.global_position + ahead * 3.0, 180.0)
+	var full := server_me.weapons.arsenal.current().magazine
+	# Hit but never killed: a kill would end the showdown and take the gun this section counts.
+	var target_health := _server_game.combat.health_of(_stand_in.entity_id)
+	target_health.cannot_die = true
+	_hits.clear()
+	_sent_events.clear()
+
+	var fire := DotFpsCommand.new()
+	fire.yaw = aim.yaw
+	fire.pitch = aim.pitch
+	fire.set_button(DotFpsCommand.BUTTON_USER_0, true)
+	await _steps(3, fire)
+	var still := DotFpsCommand.new()
+	still.yaw = aim.yaw
+	await _steps(INPUT_LEAD + 6, still)
+
+	var to_shooter := _events_of(DrEvents.Kind.HIT, CLIENT_PEER)
+	_check(not _hits.is_empty() and to_shooter > 0, "the shooter's bridge is told the shot landed",
+		"%d heard, %d sent to the shooter" % [_hits.size(), to_shooter])
+	var elsewhere := _events_of(DrEvents.Kind.HIT, BYSTANDER_PEER) + _events_of(DrEvents.Kind.HIT, 0)
+	_check(elsewhere == 0, "and nobody else is: no HIT to the other player, none broadcast", "%d" % elsewhere)
+	_check(not _hits.is_empty() and (_hits[0][0] as Vector3).distance_to(_stand_in.global_position) < 2.5,
+		"at the server's point, on the body that was hit",
+		"%s, body at %s" % [str(_hits[0][0]) if not _hits.is_empty() else "-", str(_stand_in.global_position)])
+
+	# Shot back: the shooter is now the victim, and a victim is told nothing (the stand-in has no
+	# peer, so a HIT routed by anything but the shooter's session would land on this client).
+	_hits.clear()
+	_sent_events.clear()
+	var shot_back := DotShot.new()
+	shot_back.attacker = _stand_in.entity_id
+	var wound := DotDamage.make(_stand_in.entity_id, server_me.entity_id, 1.0, null)
+	wound.health_lost = 1.0
+	wound.point = server_me.global_position + Vector3.UP
+	shot_back.damages.append(wound)
+	_server_game._note_hits(_stand_in, shot_back)
+	await _steps(4, still)
+	_check(_hits.is_empty() and _events_of(DrEvents.Kind.HIT, CLIENT_PEER) == 0,
+		"a hit somebody else landed on this player is not this player's marker", "%d" % _hits.size())
+
+	# The count: the magazine the server spent arrives in the owner's snapshot fields, and a drawn
+	# gun that predicted wrong adopts it once quiet, through the client's own correct_drawn.
+	var server_mag := server_me.weapons.arsenal.current().magazine
+	var behaviour: Variant = _client_bridge._behaviours.get(SESSION)
+	var net_mag := int(behaviour.get(&"net_magazine")) if behaviour != null else -1
+	_check(server_mag < full and net_mag == server_mag,
+		"the server's magazine, spent, crosses to the owner", "full %d, server %d, client told %d" % [full, server_mag, net_mag])
+
+	var client: Node = (load("res://game/dr_client.gd") as GDScript).new()
+	var rig := ZeeWeaponRig.new()
+	rig.name = "DrawnForTest"
+	rig.role = ZeeWeaponRig.Role.SERVER
+	rig.authority = false
+	rig.tick_rate = _client_game.tick_rate
+	_mine().add_child(rig)
+	var _set := rig.setup()
+	var held_id := server_me.weapons.current_def().id
+	var _given := rig.give(held_id)
+	if rig.arsenal.current() == null or rig.arsenal.current_slot() != server_me.weapons.arsenal.current_slot():
+		var _picked := rig.arsenal.select(server_me.weapons.arsenal.current_slot(), 0)
+	rig.arsenal.current().magazine = rig.arsenal.current().def.magazine
+	client.set(&"weapons", rig)
+	client.set(&"player", _mine())
+	client.set(&"bridge", _client_bridge)
+	client.set(&"_offline", false)
+	client.set(&"_watch_id", SESSION)
+	client.set(&"_drawn_quiet", 0.0)
+	var early: bool = client.call(&"correct_drawn")
+	var drawn_early := rig.arsenal.current().magazine
+	client.set(&"_drawn_quiet", 1.0)
+	var corrected: bool = client.call(&"correct_drawn")
+	_check(not early and drawn_early != server_mag and corrected and rig.arsenal.current().magazine == server_mag,
+		"the drawn gun takes the server's count once quiet, and not before",
+		"before %d, after %d, server %d" % [drawn_early, rig.arsenal.current().magazine, server_mag])
+	client.free()
+	_mine().remove_child(rig)
+	rig.free()
+
+	target_health.cannot_die = false
+	_server_bridge.remove_peer(BYSTANDER_PEER)
+	await _steps(2)
 	_finished()
 
 
@@ -451,6 +567,15 @@ func _test_leaving() -> void:
 
 
 # --- Helpers --------------------------------------------------------------------
+
+## How many events of [param kind] the server sent to [param peer_id] (0: broadcast).
+func _events_of(kind: int, peer_id: int) -> int:
+	var count := 0
+	for sent: Array in _sent_events:
+		if int(sent[0]) == peer_id and int(sent[1]) == kind:
+			count += 1
+	return count
+
 
 func _mine() -> DrPlayer:
 	return _client_game.players.get(DrNetBridge.player_key(SESSION))
@@ -523,6 +648,13 @@ func _make_manager(server: bool, scope: StringName, peer_id: int, parent: Node, 
 
 
 func _on_server_send(method: StringName, peer_id: int, payload: PackedByteArray) -> void:
+	# Every event the server sends, by who it was for, decoded with the client's own registry:
+	# what "to the shooter alone" is checked against, the bystander's included.
+	if method == &"event":
+		var decoded := _client_net.messages.decode(DotNetReader.new(payload), 1, false)
+		if decoded.ok and decoded.value is DrEvent:
+			_sent_events.append([peer_id, (decoded.value as DrEvent).kind])
+
 	if peer_id != 0 and peer_id != CLIENT_PEER:
 		return
 

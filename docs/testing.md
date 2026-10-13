@@ -6,7 +6,7 @@
 | --- | --- |
 | `examples/headless_run` | the simulation: the draw (five rounds, nobody twice running), side choice, the ratio, points, the tell, credit, the end, the client's settings and Escape |
 | `examples/headless_courses` | every course played: a stand-in runs it to the end, **every trap is sprung on somebody at its `victim` spot** (who must survive until the press and not after), a runner on every `spared` spot survives, an activator walks to every button, both ends of the arena are stood in, and the known traps' sounds |
-| `examples/headless_net` | over a loopback: traps posed the same on both ends, "does this kill" agreeing, a joiner answered with every pressed trap, the client's own player carried down by a block (after waiting out the tell), the end and the weapon in a watched hand |
+| `examples/headless_net` | over a loopback: traps posed the same on both ends, "does this kill" agreeing, a joiner answered with every pressed trap, the client's own player carried down by a block (after waiting out the tell), the end and the weapon in a watched hand, **a shot that lands told as HIT to the shooter alone** (a second ready peer hears none; a hit taken is not a marker) and the owner's magazine crossing for `DrClient.correct_drawn` (armed: without the HIT send, or with it broadcast, it fails) |
 | `examples/dedicated` | as a server: the console, the course vote laying the course it chose, and the exit probe |
 
 ## Rules
