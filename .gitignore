@@ -45,7 +45,7 @@
 /addons/dot_props
 
 # The courses are mg-deathrun-maps, a repository and a pack of their own.
-# bootstrap-link: mg-deathrun-maps/courses
+# bootstrap-link: mg-deathrun-maps/courses ci
 /courses
 
 # Exports
