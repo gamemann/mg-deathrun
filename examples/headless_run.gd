@@ -25,7 +25,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 29
 
-const CHECKS := 131
+const CHECKS := 132
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -533,10 +533,13 @@ func _test_a_bot_runs_the_course() -> void:
 	game._set_side(other.player_id, DrGame.ACTIVATORS)
 	game._place_everybody()
 	var finished_at := -1.0
+	var top_speed := 0.0
 
 	for i in range(TICK_RATE * 40):
 		other.controller.apply_command(DotFpsCommand.new())
 		await _step(game, 1)
+		var v := bot.controller.state.velocity
+		top_speed = maxf(top_speed, Vector2(v.x, v.z).length())
 
 		if bot.finished:
 			finished_at = game.run_elapsed
@@ -545,6 +548,8 @@ func _test_a_bot_runs_the_course() -> void:
 	_check(bot.finished and bot.place == 1, "it got to the end", "at %s, alive %s" % [
 		bot.controller.state.position, bot.is_alive()])
 	_check(finished_at > 0.0 and finished_at < 30.0, "inside thirty seconds", "%.1f s" % finished_at)
+	_check(top_speed >= game.config.run_speed * 0.95, "its ground speed reaches the run speed (not a walk)",
+		"%.2f of %.2f m/s" % [top_speed, game.config.run_speed])
 	_finished()
 
 

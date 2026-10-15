@@ -1706,7 +1706,11 @@ func _bot_run(player: DrPlayer, command: DotFpsCommand) -> void:
 		var flat_speed := Vector2(player.controller.state.velocity.x, player.controller.state.velocity.z).length()
 
 		if flat_speed > 1.2:
-			command.move = Vector2.ZERO
+			# Brake against the motion rather than coast: letting go leaves friction alone to
+			# take a landing's 5 m/s down to a stand, which was most of a second per jump.
+			var v := player.controller.state.velocity
+			command.yaw = rad_to_deg(atan2(-v.x, -v.z))
+			command.move = Vector2(0.0, -1.0)
 			return
 
 		var middle: Vector3 = _bot_settle[player.player_id]
