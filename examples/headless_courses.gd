@@ -68,13 +68,14 @@ func _run() -> void:
 		await _spring_every_trap(doc)
 		await _walk_to_every_button(doc)
 		await _stand_in_the_end(doc)
+		await _audit_collision(doc)
 
 	if _world != null:
 		remove_child(_world)
 		_world.free()
 
-	var sections := 1 + courses.size() * 4
-	var checks := 5 + courses.size() * (2 + 1 + 4) + traps + spared
+	var sections := 1 + courses.size() * 5
+	var checks := 5 + courses.size() * (2 + 1 + 4 + 1) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -342,7 +343,28 @@ func _stand_in_the_end(doc: Dictionary) -> void:
 
 # --- Helpers ------------------------------------------------------------------------
 
-func _fresh(doc: Dictionary) -> DrGame:
+## dot-core's [DotCollisionAudit] over the course as a client draws it: visible geometry nothing
+## collides with, which a runner walks through. The course keeps its drawing and its bodies
+## apart (moving parts are static bodies the course teleports), so the lenient audit is used.
+func _audit_collision(doc: Dictionary) -> void:
+	_section("%s: nothing drawn is walked through" % doc["id"])
+	var game := await _fresh(doc, true)
+	var res := DotCollisionAudit.audit(game.stage, true)
+	var found := 0
+
+	if res.ok:
+		var report: DotCollisionAudit = res.value
+		found = report.count()
+		print("  %s collision audit: %d of %d" % [doc["id"], found, report.examined])
+
+		for line in report.describe_lines().slice(1, 12):
+			print("    %s" % line)
+
+	_check(res.ok and found == 0, "no drawn geometry without a shape", "" if res.ok else res.error.message)
+	_finished()
+
+
+func _fresh(doc: Dictionary, drawn := false) -> DrGame:
 	if _world != null:
 		remove_child(_world)
 		_world.free()
@@ -363,6 +385,7 @@ func _fresh(doc: Dictionary) -> DrGame:
 	_world.config = config
 	_world.tick_rate = TICK_RATE
 	_world.register_service = false
+	_world.draw_world = drawn
 	add_child(_world)
 	_world.set_physics_process(false)
 	await get_tree().physics_frame

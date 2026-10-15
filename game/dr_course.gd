@@ -423,6 +423,8 @@ func _moving_disc(radius: float, thickness: float, role: DrTextures.Role) -> Sta
 ## A volume that kills: drawn as what it is, never solid.
 func _killer(spec: Dictionary) -> Node3D:
 	var root := Node3D.new()
+	# Measured by `lethal_at`, never collided: a pit's spikes or pool have no shape on purpose.
+	root.set_meta(&"dot_no_collision", true)
 	root.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
 	_draw_look(root, spec["size"], str(spec.get("look", "spikes")), "up",
 		spec.get("tint", Color.WHITE), false)
@@ -601,6 +603,9 @@ func _make_trap(index: int, spec: Dictionary) -> void:
 			node = body
 		else:
 			node = Node3D.new()
+			# A part that is not solid is drawn only: a lethal one is measured (`lethal_at`),
+			# never collided, so a drawing with no shape is its design (dot-core DotCollisionAudit).
+			node.set_meta(&"dot_no_collision", true)
 
 		node.name = "Part_%d" % part_index
 		node.transform = _part_rest(part_spec)
@@ -633,6 +638,8 @@ func _make_trap(index: int, spec: Dictionary) -> void:
 func _make_button(spec: Dictionary) -> Node3D:
 	var root := Node3D.new()
 	root.name = "Button"
+	# Not solid, as the note above says: a post a player catches on ends a round.
+	root.set_meta(&"dot_no_collision", true)
 	root.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
 
 	var post := MeshInstance3D.new()
@@ -1028,6 +1035,8 @@ func _build_world() -> void:
 	# ticks by something falling fast enough.
 	var floor_mesh := MeshInstance3D.new()
 	floor_mesh.name = "Void"
+	# Below the kill height, where whoever falls is already dead: nobody stands on it.
+	floor_mesh.set_meta(&"dot_no_collision", true)
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(1600.0, 1600.0)
 	floor_mesh.mesh = plane
