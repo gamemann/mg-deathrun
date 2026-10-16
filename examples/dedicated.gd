@@ -14,7 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 10
-const CHECKS := 60
+const CHECKS := 61
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -398,9 +398,14 @@ func _test_the_course_vote() -> void:
 		"the new course starts the vote over", str(director.current_id()))
 	vote.set("voters_fn", func() -> Array: return [&"console"])
 	director.advance(director.rules.vote_cooldown_sec + 0.1)
+	var ballots: Array = []
+	director.vote_opened.connect(func(_options: Array, _seconds: float) -> void: ballots.append(1))
 	var rocked := _run_command("rtv")
 	vote.call("advance", 0.05)
 	_check(director.is_voting(), "and a passing rock-the-vote opens a ballot", str(rocked))
+	# The director opens a rocked ballot itself (dot-vote API 2); this game no longer does, so
+	# exactly one ballot opens, not one from each.
+	_check(ballots.size() == 1, "and exactly one ballot, the director's alone", str(ballots.size()))
 	_finished()
 
 
