@@ -23,9 +23,9 @@ const DrSettings := preload("../game/dr_settings.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 29
+const SECTIONS := 30
 
-const CHECKS := 132
+const CHECKS := 133
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -53,6 +53,7 @@ func _run() -> void:
 	_test_the_wire()
 	_test_catalogue()
 	_test_delivery()
+	_test_the_weapon_art_is_vendored()
 	_test_the_timeline()
 	await _test_world_builds()
 	await _test_the_draw()
@@ -1240,6 +1241,15 @@ func _test_the_map_menu() -> void:
 	_check(not settings.menu.picker.is_open(), "and the picker is closed")
 	settings.queue_free()
 	await get_tree().process_frame
+	_finished()
+
+
+## The pack carries its art (a delivered game has only what is vendored in assets/), so every
+## model the weapons table names must be here. Sync it with zee-dot-weapons' tools/sync-art.sh.
+func _test_the_weapon_art_is_vendored() -> void:
+	_section("every model the weapon art table names is vendored in this game")
+	var models := ZeeWeaponArtTable.validate_models()
+	_check(models.ok, "no weapon model is missing", "" if models.ok else models.error.message)
 	_finished()
 
 
