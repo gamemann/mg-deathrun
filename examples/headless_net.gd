@@ -26,7 +26,7 @@ const DrRequest := preload("../game/net/dr_request.gd")
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
 const SECTIONS := 12
-const CHECKS := 54
+const CHECKS := 55
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -280,6 +280,9 @@ func _test_a_client_joins() -> void:
 	_check(_client_bridge.local_player_id == SESSION, "the client is told who it is")
 	_check(_client_game.tick_rate == SERVER_TICK_RATE and _client_game.stage.tick_rate == SERVER_TICK_RATE,
 		"it adopts the server's tick rate, and so does its course", "%d / %d" % [_client_game.tick_rate, _client_game.stage.tick_rate])
+	_check(Engine.max_physics_steps_per_frame >= ceili(0.25 * float(SERVER_TICK_RATE)),
+		"the engine's step cap covers a quarter second at the adopted rate",
+		"%d steps for %d Hz" % [Engine.max_physics_steps_per_frame, SERVER_TICK_RATE])
 	_check(_client_game.players.size() == 2, "it has a body for itself and for the stand-in", "%d" % _client_game.players.size())
 
 	# Into a round, with the client a runner and the stand-in at the buttons whatever the draw
