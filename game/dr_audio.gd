@@ -76,6 +76,7 @@ const COURSE_SOUND := {
 	&"dr_foundry": [&"amb_industrial", &"metal"],
 	&"dr_ice_works": [&"amb_wind", &"metal"],
 	&"dr_temple": [&"amb_cave", &"concrete"],
+	&"dr_quarry": [&"amb_wind", &"concrete"],
 	&"dr_practice": [&"amb_industrial", &"concrete"],
 }
 
