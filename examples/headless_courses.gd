@@ -158,12 +158,16 @@ func _check_facing(catalogue: DrCatalogue) -> void:
 	for id: StringName in catalogue.courses:
 		var doc: Dictionary = catalogue.courses[id]
 		var finish: Vector3 = doc["finish"]["at"]
+		# A course that bends (an imported ring) is faced down its first leg: the first route point
+		# is where the runners go, and the finish is round a corner.
+		var route: Array = doc.get("route", [])
+		var heading: Vector3 = route[mini(1, route.size() - 1)]["at"] if not route.is_empty() else finish
 
 		for area in ["start", "activators"]:
 			for seat in range(3):
 				var spot := DrCourse.spot_in(doc[area], seat, 3)
 				var facing := Basis(Vector3.UP, deg_to_rad(float(spot[1]))) * Vector3.FORWARD
-				var ahead := finish - (spot[0] as Vector3)
+				var ahead := (heading if area == "start" else finish) - (spot[0] as Vector3)
 				ahead.y = 0.0
 				var along := facing.dot(ahead.normalized())
 
@@ -269,7 +273,9 @@ func _walk_to_every_button(doc: Dictionary) -> void:
 		var button := game.stage.button_point(index)
 		var reached := false
 
-		for i in range(TICK_RATE * 15):
+		# 15 s, and the time a run at about 5 m/s takes for a long way between two buttons
+		var budget := TICK_RATE * (15 + int(maxf(0.0, Vector2(button.x - activator.eye_position().x, button.z - activator.eye_position().z).length() - 60.0) / 5.0))
+		for i in range(budget):
 			var eyes := activator.eye_position()
 			var look := button - eyes
 			var flat := Vector3(look.x, 0.0, look.z)
