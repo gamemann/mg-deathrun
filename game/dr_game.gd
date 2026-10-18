@@ -149,6 +149,10 @@ var hold_clock: Callable = Callable()
 var stage: DrCourse = null
 var catalogue: DrCatalogue = null
 var combat: DotCombatManager = null
+
+## `func(player_id: StringName) -> bool`: whether a player may be hurt now, assigned by the
+## module from dot-game's `can_peer_be_harmed`. Unset offline, and a bot is never loading.
+var harm_gate: Callable = Callable()
 var match_node: DotMatch = null
 var random: DotRandomManager = null
 var physics: DotPhysicsLayout = null
@@ -427,6 +431,16 @@ func _build_combat() -> void:
 	combat.resolver.hit_groups = DotHitGroup.defaults()
 	combat.resolver.team_of = func(entity_id: int) -> int:
 		return team_of(entities.key_for_id(entity_id))
+
+	# dot-game's "still loading": the one place every hurt passes (a trap's kill, the floor, a
+	# weapon), so a covered seat is neither hurt nor eliminated, and a round counts the living
+	# from health. An admin's slay or slap is the operator's word and passes.
+	combat.resolver.adjust = func(damage: DotDamage) -> void:
+		if damage.context.get("admin", false):
+			return
+
+		if not can_be_harmed(entities.key_for_id(damage.victim)):
+			damage.refuse("still loading")
 
 	# `add_child` IS the setup; calling it again doubled every boot line. See mg-smash-copter.
 	add_child(combat)
@@ -788,6 +802,12 @@ func players_on(side: int) -> Array[DrPlayer]:
 	return out
 
 
+## Whether [param player_id] may be damaged or eliminated now: false while their client is behind
+## its loading cover. True for anybody the gate does not know (bots, offline).
+func can_be_harmed(player_id: StringName) -> bool:
+	return not harm_gate.is_valid() or bool(harm_gate.call(player_id))
+
+
 ## How many of a side are up and in the round.
 func alive_on(side: int) -> int:
 	if not authoritative:
@@ -919,6 +939,13 @@ func _draw_sides() -> void:
 					wishes[id] = 1
 				RUNNERS:
 					wishes[id] = -1
+
+	# A seat still behind its loading cover is the last choice for an activator: its buttons
+	# would sit unpressed (and its traps unaimed) while it cannot see. Treated as asking to
+	# run, so it is drawn only when the round would otherwise have no activator.
+	for id in ids:
+		if not can_be_harmed(id):
+			wishes[id] = -1
 
 	# dot-team's draw, which was extracted from this one. rest_first keeps this game's rule:
 	# last round's activators sit out even if they volunteered, and come back only when there

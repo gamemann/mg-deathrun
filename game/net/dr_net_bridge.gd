@@ -337,6 +337,19 @@ func open_link(parent: Node) -> void:
 	link = DrNetLink.attached_to(parent, self, net != null and net.is_server)
 
 
+## The link lives under the server, not under this node, so dropping the bridge left it there.
+## A module loaded again then opened a second link, which Godot named `@Node@…` because
+## `Deathrun` was taken, and the client's RPCs addressed a path the new one did not have.
+func _exit_tree() -> void:
+	if link != null and is_instance_valid(link) and link.get_parent() != self:
+		# Out of the tree now, not at the end of the frame: a module loaded again in the same
+		# frame would otherwise find the name still taken.
+		link.get_parent().remove_child(link)
+		link.queue_free()
+
+	link = null
+
+
 ## How every dot-net message reaches a peer.
 ##
 ## [b]Routed by DELIVERY, not by kind.[/b] Snapshots are unreliable and go on the snapshot

@@ -211,6 +211,14 @@ func _game_load() -> DotResult:
 	# stays the switch it always was, so a server config that sets it means what it meant.
 	_quota = DotBotQuota.install(self, world.config.minimum_players)
 
+	# dot-game's "still loading": a seat behind its client's cover is neither hurt nor eliminated
+	# (see DrGame.harm_gate). Asked by player id, resolved to a peer through the bridge.
+	world.harm_gate = func(player_id: StringName) -> bool:
+		if bridge == null:
+			return true
+		var peer := int((bridge as DrNetBridge).peer_for_player(DrNetBridge.session_of(player_id)))
+		return peer <= 0 or can_peer_be_harmed(peer)
+
 	# How well the stand-ins fight and react: dot-bot's `bot_difficulty` and its `bot_*`
 	# settings, on the world (`DrGame._aim_bot`, the activator's press).
 	var _bot_cvars := DotBotSettings.of(world).bind_cvars(add_cvar, DotConVar.FLAG_NOTIFY, add_command)

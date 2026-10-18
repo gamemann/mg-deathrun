@@ -3,6 +3,8 @@ extends Node
 const DrConfig := preload("../game/dr_config.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrPlayer := preload("../game/dr_player.gd")
+const DrNetBridge := preload("../game/net/dr_net_bridge.gd")
+const DrNetLink := preload("../game/net/dr_net_link.gd")
 
 ## The game as a deployed server runs it: a real [DotServer], booted from a config file, with
 ## the module loaded BY PATH the way an operator names it — so the netcode, the services, the
@@ -13,8 +15,8 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## [DotGameModule]'s order runs, a cvar is typed at a console and a round is played by
 ## nothing but the stand-ins the module seats itself.
 
-const SECTIONS := 10
-const CHECKS := 61
+const SECTIONS := 11
+const CHECKS := 69
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -56,6 +58,7 @@ func _run() -> void:
 		await _test_a_reload_keeps_delivered_courses()
 		await _test_the_course_vote()
 		_test_finish_round_waits_for_a_live_round()
+		await _test_a_covered_seat_is_not_harmed()
 		await _test_it_unloads_cleanly()
 
 	_test_no_message_preloads_itself()
@@ -574,6 +577,125 @@ func _test_a_reload_keeps_delivered_courses() -> void:
 		path = path.get_base_dir()
 	DirAccess.remove_absolute("res://dot_cloud")
 	_finished()
+
+
+## [b]A seat whose client has not lifted its loading cover cannot be harmed, and can once it does[/b]
+## (dot-game's "still loading"), over a real ENet socket. A client joins and says nothing, as one
+## still loading its level; the world's damage path is then asked to kill it by a shot, by a trap
+## and by the floor, and must refuse all of them. An admin's slay still passes, and the draw of
+## activators leaves it for last. The client then sends `game.cover` on the wire and the same hit
+## lands. Stand-ins never reach this: a bot is never loading.
+func _test_a_covered_seat_is_not_harmed() -> void:
+	_section("a client behind its loading cover is not harmed, and is once it lifts")
+
+	var module := _module()
+	var bridge := module.get("bridge") as DrNetBridge if module != null else null
+	var side := Node.new()
+	side.name = "CoverClient"
+	add_child(side)
+	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), side.get_path())
+	var link := DotClientLink.new()
+	link.name = "Server"
+	link.player_name = "Covered"
+	link.transport_preference = "udp"
+	link.udp_address = "127.0.0.1:%d" % PORT
+	# RPC paths are relative to the multiplayer root, so the link must sit at the path the
+	# server's does: "Dedicated/Server" under the root.
+	var mirror := Node.new()
+	mirror.name = "Dedicated"
+	side.add_child(mirror)
+	mirror.add_child(link)
+	# The link retires whatever the game left under it when it signs on, so a sink for the
+	# server's snapshots is put back at each phase change (a real game scene does this itself).
+	var attach := func(_a: Variant = null, _b: Variant = null) -> void:
+		if link.get_node_or_null(NodePath(DrNetLink.NODE_NAME)) == null:
+			var _sink := DrNetLink.attached_to(link, null, false)
+	attach.call()
+	link.phase_changed.connect(attach)
+	var spawned := [false]
+	link.spawned.connect(func() -> void: spawned[0] = true)
+	link.connect_to_server("127.0.0.1:%d" % PORT)
+	var joined := await _until(func() -> bool:
+		return spawned[0] or link.phase == DotClientLink.Phase.FAILED, 30.0)
+	joined = joined and spawned[0]
+	var peer := side.multiplayer.get_unique_id() if joined else 0
+	var session := 0
+	if bridge != null and joined:
+		var _seated := await _until(func() -> bool: return bridge.player_for_peer(peer) != 0, 10.0)
+		session = bridge.player_for_peer(peer)
+	var key := DrNetBridge.player_key(session)
+	var _there := await _until(func() -> bool: return game.players.has(key), 10.0)
+	var victim: DrPlayer = game.players.get(key)
+	_check(victim != null, "a client joins over the socket and is seated", "peer %d session %d" % [peer, session])
+
+	if victim == null:
+		for what in [
+			"the server holds it as loading", "a lethal hit does nothing to it",
+			"a trap's kill and the floor's leave it up", "an admin's slay still passes",
+			"the draw leaves it for a stand-in", "its cover report crosses the wire",
+			"and the same hit now lands",
+		]:
+			_check(false, what)
+		link.disconnect_from_server("done")
+		side.queue_free()
+		_finished()
+		return
+
+	_check(bool(module.call("is_peer_loading", peer)) and not game.can_be_harmed(key),
+		"the server holds it as loading from its spawn")
+
+	victim.health.alive = true
+	victim.health.health = victim.health.max_health
+	victim.health.invulnerable = false
+	victim.health.invulnerable_until_tick = -1
+	var before := victim.health.health
+	var hit := DotDamage.make(0, victim.entity_id, victim.health.max_health * 10.0, null)
+	hit.tick = game._tick
+	hit.context = {"why": &"shot"}
+	var _applied: Variant = game.combat.apply_damage(hit)
+	_check(victim.is_alive() and is_equal_approx(victim.health.health, before),
+		"a lethal hit does nothing to it", "%s -> %s" % [before, victim.health.health])
+
+	game._kill(victim, 0, DrGame.DIED_TRAP)
+	game._kill(victim, -1, DrGame.DIED_FELL)
+	_check(victim.is_alive(), "a trap's kill and the floor's leave it up")
+
+	var slain: Variant = (module.get("services") as Object).call("_mod_hurt", StringName(str(session)), -1.0)
+	_check(slain is DotResult and (slain as DotResult).ok and not victim.is_alive(),
+		"an admin's slay still passes", str(slain))
+	victim.health.alive = true
+	victim.health.health = before
+
+	var drawn := 0
+	for _i in range(12):
+		game._draw_sides()
+		if game.sides.get(key, 0) == DrGame.ACTIVATORS:
+			drawn += 1
+	_check(drawn == 0, "the draw leaves it for a stand-in", "drawn %d of 12" % drawn)
+
+	DotGameClient.report_cover(link, false)
+	var lifted := await _until(func() -> bool: return not bool(module.call("is_peer_loading", peer)), 10.0)
+	_check(lifted and game.can_be_harmed(key), "its cover report crosses the wire and ends the loading state")
+	var after_lift := victim.health.health
+	var late := DotDamage.make(0, victim.entity_id, 1.0, null)
+	late.tick = game._tick
+	late.context = {"why": &"late"}
+	var _late_applied: Variant = game.combat.apply_damage(late)
+	_check(victim.health.health < after_lift, "and the same hit now lands",
+		"%s -> %s" % [after_lift, victim.health.health])
+
+	link.disconnect_from_server("done")
+	side.queue_free()
+	_finished()
+
+
+func _until(condition: Callable, seconds: float) -> bool:
+	var deadline := Time.get_ticks_msec() + int(seconds * 1000.0)
+	while Time.get_ticks_msec() < deadline:
+		if bool(condition.call()):
+			return true
+		await get_tree().physics_frame
+	return bool(condition.call())
 
 
 func _test_it_unloads_cleanly() -> void:
