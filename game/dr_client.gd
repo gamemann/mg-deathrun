@@ -62,6 +62,10 @@ const USE_KEY := KEY_E
 var game: DrGame = null
 var player: DrPlayer = null
 var camera: Camera3D = null
+
+## Keeps the screen covered, and the local body and the input still, until the level, the
+## player and the camera are all in. See [method _build_gate].
+var gate: DotLoadGate = null
 var hud: DrHud = null
 
 ## The Tab board, the menu's. See [method _wire_board].
@@ -124,6 +128,10 @@ var _beeped: int = -1
 
 
 func _ready() -> void:
+	# First, before anything can be drawn: the course and the player arrive after this node is
+	# in the tree.
+	_build_gate()
+
 	# [b]zee-dot-weapons' art is this game's copy of it, wherever this game is mounted.[/b]
 	# `ZeeWeaponArtTable` names `res://assets/…`, and in a delivered pack that is the one place
 	# the art is not: every gun and the arms would load invisible, one WARN each.
@@ -157,6 +165,8 @@ func _ready() -> void:
 	)
 	# The sky, the sun and the void: drawn here, never on a server.
 	game.draw_world = true
+	# Before the world is added: a server-less world lays its first course out in its own _ready.
+	_hold_for_courses()
 	add_child(game)
 	_build_ragdolls()
 
@@ -192,6 +202,41 @@ func _ready() -> void:
 	# [DotPlatform] can measure, and there is no capability to ask.
 	if not DotPlatform.is_web():
 		_capture()
+
+
+## The load gate: covered, and the local body and the input still, until the course is built,
+## the local player exists and its camera is current.
+##
+## [b]Covered also means the round does not run.[/b] Offline the world ticks itself, so the
+## countdown, the stand-in activators' buttons, the traps' deaths and the round clock would all
+## have run in front of a picture; `DrGame.hold_clock` stops all of them and leaves only the
+## bodies, which settle onto the floor under the cover with their input off. Connected, the
+## server owns the round and a runner's death is its decision; what is left to hold is this
+## end's sampling and keys, which wait on [method _covered].
+func _build_gate() -> void:
+	gate = DotLoadGate.new()
+	gate.name = "LoadGate"
+	# A headless run draws nothing, so there is nothing to compile; its warm-up would only wait
+	# out its timeout, and every suite that drives a client would wait with it.
+	gate.warm_up_on_open = DisplayServer.get_name() != "headless"
+	add_child(gate)
+	gate.hold(&"map", "Loading the course")
+	gate.require(&"spawned", func() -> bool:
+		return player != null and camera != null and camera.is_inside_tree(), "Joining")
+
+
+## A course is built: held from the moment the old one starts to go, released once the new one
+## stands. [signal DrGame.world_clearing] and [signal DrGame.world_rebuilt] fire for the first
+## course, the next round's and one a server sent.
+func _hold_for_courses() -> void:
+	game.world_clearing.connect(func() -> void: gate.hold(&"map", "Loading the course"))
+	game.world_rebuilt.connect(func() -> void: gate.release(&"map"))
+	game.hold_clock = _covered
+
+
+## True while the load gate covers the screen: no input, no prediction sampling, no round clock.
+func _covered() -> bool:
+	return gate != null and not gate.is_open()
 
 
 # --- Dead bodies -----------------------------------------------------------
@@ -402,6 +447,8 @@ func _adopt(candidate: DrPlayer) -> void:
 		return
 
 	player = candidate
+	if gate != null:
+		gate.freeze(player)
 	_build_camera()
 
 	# Offline the world samples this player's movement itself, so the buttons go onto that
@@ -1143,12 +1190,17 @@ func _physics_process(delta: float) -> void:
 	if net == null or not net.is_running() or bridge == null:
 		return
 
-	var move := _sampler.sample(delta) if _sampler != null else DotFpsCommand.new()
-	_stamp(move)
-
 	# The clock says how many ticks this frame is worth, which on a client whose engine runs
 	# at the server's rate is almost always exactly one.
 	var ticks := net.clock.advance(delta)
+
+	# The clock has advanced; only the sampling waits, so the mouse does not pile up a turn
+	# behind the cover and the server sees an idle body until it lifts.
+	if _covered():
+		return
+
+	var move := _sampler.sample(delta) if _sampler != null else DotFpsCommand.new()
+	_stamp(move)
 
 	# [b]Each pass is its own tick.[/b] `advance` has already moved the clock by all of
 	# them, so `input_tick()` is the LAST one on every pass: a frame worth two ticks sent
@@ -1177,7 +1229,7 @@ func _drive_offline(_delta: float) -> void:
 		_stamp(pending)
 		player.wanted_slot = _slot
 
-	player.wants_use = _use
+	player.wants_use = _use and not _covered()
 
 	_drive_view_model(pending)
 
@@ -1641,6 +1693,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		# sits deeper in the tree, sees it first, and closes the screen.
 		if settings != null:
 			settings.open()
+		return
+
+	# Nothing below acts while the cover is up: no fire, use, reload or slot.
+	if _covered():
 		return
 
 	# The wheel, on dot-menu's previous/next weapon actions (rebindable). Only with the pointer

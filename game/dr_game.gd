@@ -135,6 +135,11 @@ signal hit_landed(player_id: StringName, point: Vector3, killed: bool, headshot:
 ## Whether something else drives the tick: the bridge, on both ends.
 @export var external_tick: bool = false
 
+## Asked every tick of a world that ticks itself: true while a cover is up (the client's load
+## gate). Only the bodies are stepped then, so they settle onto the floor, and the phase, the
+## buttons, the course's deaths, the bots and the round clock wait. Unset, never held.
+var hold_clock: Callable = Callable()
+
 ## Whether this world publishes itself under [constant SERVICE].
 @export var register_service: bool = true
 
@@ -1529,7 +1534,22 @@ func _physics_process(delta: float) -> void:
 ## One tick, counted by this world. What an offline client and the suite use.
 func simulate(delta: float) -> void:
 	_tick += 1
+
+	if hold_clock.is_valid() and hold_clock.call():
+		_step_bodies_only(delta)
+		return
+
 	_step(delta)
+
+
+## A tick under a cover: the bodies move, nothing else happens. A body that is not alive or is
+## watching is left alone, as in [method _step].
+func _step_bodies_only(delta: float) -> void:
+	for id: StringName in players:
+		var body: DrPlayer = players[id]
+
+		if body.is_alive() and not body.watching:
+			body.simulate(_tick, delta)
 
 
 ## One tick, numbered by the netcode. What the bridge uses. The step is still a fixed
