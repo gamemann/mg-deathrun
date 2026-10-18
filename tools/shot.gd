@@ -10,6 +10,7 @@ extends Node
 ##   tools/shot.sh --view=button --spent            # ...once that trap is spent
 ##   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5   # a trap, half a second after its press
 ##   tools/shot.sh --view=third                     # third person, mid-course
+##   tools/shot.sh --view=cover                     # the loading cover, before it lifts
 ##   tools/shot.sh --view=end                       # the end arena, from a runner who made it
 ##
 ## Any `--dr-*` is the game's own configuration (see `DrConfig`), because `DrClient` reads it.
@@ -62,6 +63,17 @@ func _ready() -> void:
 	_client.set("force_offline", true)
 	_client.set("third_person", _view == "third")
 	add_child(_client)
+	# --view=cover: the loading cover dot-game's DotGameClient puts up first, before it lifts.
+	if _view == "cover":
+		for _i in 2:
+			await RenderingServer.frame_post_draw
+		var platform: DotGameClient = _client.get("platform")
+		print("cover %s" % ("lifted" if platform.is_shown() else "up"))
+		var cover_path := ProjectSettings.globalize_path(_out)
+		DirAccess.make_dir_recursive_absolute(cover_path.get_base_dir())
+		print("saved %s: %s" % [_out, error_string(_client.get_viewport().get_texture().get_image().save_png(cover_path))])
+		get_tree().quit(0)
+		return
 	_run.call_deferred()
 
 
@@ -155,7 +167,11 @@ func _run() -> void:
 			await _seconds_of(_seconds)
 
 	if _board:
-		_client.call("_show_board", true)
+		var menu: Variant = _client.get("settings").menu
+		var tab := InputEventKey.new()
+		tab.physical_keycode = KEY_TAB
+		tab.pressed = true
+		menu.handle_event(tab)
 
 	await _frames(3)
 	var image := get_viewport().get_texture().get_image()

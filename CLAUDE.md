@@ -26,7 +26,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `game/dr_config.gd`, `dr_paths.gd` | every rule a course is played under; `rebase` for pack delivery |
 | `game/dr_module.gd`, `dr_services.gd`, `dr_vote.gd`, `dr_server.gd` | the `DotGameModule` (cvars, `dr_status`/`dr_courses`/`dr_traps`/`dr_reload`, stand-ins, delivered courses); chat/voice/moderation; the course vote over dot-vote |
 | `game/net/` | the codec (STAGE, TEAM, TRAP, FINISHED…), link, player behaviour, bridge |
-| `game/dr_client.gd`, `dr_hud.gd`, `dr_audio.gd`, `dr_figure.gd`, `dr_settings.gd`, … | the client: poses the course per frame |
+| `game/dr_client.gd`, `dr_hud.gd`, `dr_audio.gd`, `dr_figure.gd`, `dr_settings.gd`, … | the client: poses the course per frame; its platform wiring (loading cover, settings, console, Tab, M, pointer, input block) is dot-game's `DotGameClient` (`platform`) |
 | `courses/` | link to `../mg-deathrun-maps/courses` |
 | `examples/` | `headless_run`, `headless_courses`, `headless_net`, `dedicated` |
 | `tools/` | `shot.sh` (render a view), `trace_run` (where a stand-in runner goes), `audio_probe` |

@@ -8,6 +8,7 @@
 #   tools/shot.sh --view=button [--spent]              # the activator at a button: the key prompt
 #   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5      # a trap, mid-run, on somebody
 #   tools/shot.sh --view=third --seconds=8             # third person, on the course
+#   tools/shot.sh --view=cover                         # the loading cover, before it lifts
 #   tools/shot.sh --view=end                           # the end arena, from a runner who made it
 #   tools/shot.sh --view=end --end-wait=5              # ...once the weapon they were handed is out
 #   tools/shot.sh --view=end --end-wait=3 --fire=0.4   # ...firing: flash, tracer, impact, the counter down
