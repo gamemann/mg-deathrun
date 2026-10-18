@@ -25,7 +25,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 30
 
-const CHECKS := 133
+const CHECKS := 135
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -1094,6 +1094,16 @@ func _test_help_and_menu() -> void:
 	_check(built.ok and keys != null and keys.key_for(DotMenuBindings.HELP_ACTION) == "H", "help is on H")
 	_check(keys.defaults_on("H").size() == 1, "and nothing else in the table defaults to H",
 		str(keys.defaults_on("H").map(func(r: Dictionary) -> String: return str(r["label"]))))
+	# The wheel cycles weapons and does not jump.
+	var wu := InputEventMouseButton.new()
+	wu.button_index = MOUSE_BUTTON_WHEEL_UP
+	wu.pressed = true
+	var wd := InputEventMouseButton.new()
+	wd.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wd.pressed = true
+	_check(wu.is_action_pressed(DotMenuBindings.WEAPON_PREVIOUS_ACTION) and wd.is_action_pressed(DotMenuBindings.WEAPON_NEXT_ACTION),
+		"wheel up is previous weapon and wheel down is next")
+	_check(not wu.is_action_pressed(&"dot_fps_jump") and not wd.is_action_pressed(&"dot_fps_jump"), "and the wheel does not jump")
 	var h := InputEventKey.new()
 	h.physical_keycode = KEY_H
 	h.keycode = KEY_H

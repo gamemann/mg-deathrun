@@ -1643,6 +1643,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			settings.open()
 		return
 
+	# The wheel, on dot-menu's previous/next weapon actions (rebindable). Only with the pointer
+	# captured and a weapon in hand: spectators and a menu get no weapon change.
+	if event is InputEventMouseButton and event.pressed and _captured and not is_spectating():
+		var step := 0
+		if event.is_action_pressed(DotMenuBindings.WEAPON_NEXT_ACTION):
+			step = 1
+		elif event.is_action_pressed(DotMenuBindings.WEAPON_PREVIOUS_ACTION):
+			step = -1
+		if step != 0:
+			var cycled := _cycled_slot(step)
+			if cycled != 0:
+				_slot = cycled
+			return
+
 	# The game's keys, each a row of [DrBindings] read through its action, so a key moved on
 	# the Controls page moves what it does here.
 	if event is InputEventKey:
@@ -1699,6 +1713,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			player.sampler.handle_event(event)
 		elif _sampler != null:
 			_sampler.handle_event(event)
+
+
+## The slot [param step] places along from the one in hand, over the slots carried (so an
+## empty slot is skipped); 0 when there is nothing to change to.
+func _cycled_slot(step: int) -> int:
+	if weapons == null or weapons.arsenal == null:
+		return 0
+	var carried := weapons.arsenal.slots()
+	if carried.size() < 2:
+		return 0
+	var at := carried.find(_slot if _slot != 0 else weapons.arsenal.current_slot())
+	if at < 0:
+		at = carried.find(weapons.arsenal.current_slot())
+	return carried[posmod(at + step, carried.size())]
 
 
 func describe() -> Dictionary:
