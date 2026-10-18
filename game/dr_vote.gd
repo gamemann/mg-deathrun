@@ -20,6 +20,8 @@ extends Node
 ## (the client shell's [DotBallotPanel]), and never holds a director: a client that applied a
 ## result would be deciding what it plays.
 
+const DrCatalogue := preload("dr_catalogue.gd")
+
 const CHANNEL := "deathrun.vote"
 
 ## The key in the running game's descriptor metadata an operator's overrides are read from —
@@ -43,6 +45,11 @@ const COMMAND_NAMES := {"vote": "vote"}
 ## [code]func() -> Array[/code] of [code][id, name][/code] pairs: every course a ballot may
 ## offer. The host's, because which courses a server plays is the world's to say.
 var courses_fn: Callable = Callable()
+
+## The Workshop's index and the `map_kind`s taken from it. Null and empty are the shared index
+## and `provides.json`'s `accepts.map_kinds`; a suite sets both to a fixture.
+var content_index: DotContentIndex = null
+var accepted_kinds: PackedStringArray = PackedStringArray()
 
 ## [code]func(id: StringName) -> DotResult[/code]: play this course next.
 var apply_fn: Callable = Callable()
@@ -87,7 +94,15 @@ func setup() -> DotResult:
 	source.label = "courses"
 	source.apply_fn = func(id: StringName) -> DotResult:
 		return apply_fn.call(id) if apply_fn.is_valid() else DotResult.success(id)
+	source.entries_fn = func() -> Array:
+		return courses_fn.call() if courses_fn.is_valid() else []
 	refresh_courses()
+	# The Workshop's courses of the kinds this game plays, read from the index on every ballot.
+	# Solo they are listed; online the index has no subscription entry, so none appear. The
+	# game's own ids are in the entries and win.
+	source.follow_content(
+		content_index if content_index != null else DotContentIndex.shared(),
+		DrCatalogue.accepted_map_kinds() if accepted_kinds.is_empty() else accepted_kinds)
 
 	director = DotVoteDirector.new()
 	director.name = "VoteDirector"

@@ -15,6 +15,8 @@ extends Node
 ##
 ## Any `--dr-*` is the game's own configuration (see `DrConfig`), because `DrClient` reads it.
 
+const DrCourseDoc := preload("../game/dr_course_doc.gd")
+const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrClient := preload("../game/dr_client.gd")
 const DrGame := preload("../game/dr_game.gd")
 
@@ -37,6 +39,31 @@ var _spent := false
 var _client: Node = null
 
 
+## --view=maps: a fixture course pack in the shared [DotContentIndex], as the solo shell leaves
+## one after a subscribed pack mounts, so the M menu shows what a player would see. The pack's
+## course is the practice course under another name, written to user://.
+func _subscribe_fixture() -> void:
+	var dir := "user://ws_shot_dr/"
+	DirAccess.make_dir_recursive_absolute(dir)
+	var doc := DrCatalogue.practice().duplicate(true)
+	doc["id"] = "fixture_pit"
+	doc["name"] = "Fixture Pit"
+	doc["blurb"] = "From the Workshop."
+	var file := FileAccess.open(dir + "pit.json", FileAccess.WRITE)
+	file.store_string(DrCourseDoc.to_json(doc))
+	file.close()
+	var index := DotContentIndex.shared()
+	index.set_session(DotContentIndex.SESSION_SOLO)
+	var _added := index.add_pack({
+		"content_id": "fixture/pits", "version": "1.0.0", "prefix": dir,
+		"session": DotContentIndex.SESSION_SOLO, "source": &"subscription",
+		"provides": {"schema": 1, "title": "Hilltop Pack", "kinds": ["map"], "entries": [
+			{"kind": "map", "id": "fixture_pit", "name": "Fixture Pit", "scene": "pit.json", "map_kind": "deathrun"},
+			{"kind": "map", "id": "fixture_run", "name": "Fixture Run", "scene": "pit.json", "map_kind": "surf"},
+		]},
+	})
+
+
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--view="):
@@ -57,6 +84,9 @@ func _ready() -> void:
 			_trap = arg.trim_prefix("--trap=")
 		elif arg.begins_with("--after="):
 			_after = arg.trim_prefix("--after=").to_float()
+
+	if _view == "maps":
+		_subscribe_fixture()
 
 	_client = DrClient.new()
 	_client.name = "Client"
@@ -154,6 +184,21 @@ func _run() -> void:
 			# side put the camera in the wall for a trap on the left half.
 			var eye := Vector3(clampf(-victim.x * 0.6, -2.4, 2.4), victim.y + 2.6, victim.z + 6.5)
 			_free_camera().look_at_from_position(eye, victim + Vector3(0.0, 0.9, 0.0))
+		"maps":
+			# M: the solo course list, with the Workshop's course among the game's own.
+			await _seconds_of(0.5)
+			var settings: Object = _client.get("settings")
+			var menu: Variant = settings.get("menu")
+			menu.call(&"open_maps")
+			var picker: Variant = menu.get("picker")
+			if picker != null:
+				# Past the last row and back one: the fixture sorts after the shipped courses' ids.
+				var rows := game.course_rows()
+				for i in range(rows.size()):
+					if str(rows[i]["id"]) == "fixture_pit":
+						picker.call(&"turn", 99)
+						picker.call(&"turn", i - rows.size() + 1)
+			await _seconds_of(_seconds)
 		"end":
 			await _seconds_of(game.config.countdown_seconds + 0.5)
 			local.place_at(game.course_doc["finish"]["at"], 0.0)

@@ -28,12 +28,12 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `game/net/` | the codec (STAGE, TEAM, TRAP, FINISHED…), link, player behaviour, bridge |
 | `game/dr_client.gd`, `dr_hud.gd`, `dr_audio.gd`, `dr_figure.gd`, `dr_settings.gd`, … | the client: poses the course per frame; its platform wiring (loading cover, settings, console, Tab, M, pointer, input block) is dot-game's `DotGameClient` (`platform`) |
 | `courses/` | link to `../mg-deathrun-maps/courses` |
-| `examples/` | `headless_run`, `headless_courses`, `headless_net`, `dedicated` |
+| `examples/` | `headless_run`, `headless_workshop`, `headless_courses`, `headless_net`, `dedicated` |
 | `tools/` | `shot.sh` (render a view), `trace_run` (where a stand-in runner goes), `audio_probe` |
 
 ## Running and testing
 
-- `./game.sh` plays offline; `./game.sh online` runs a local server and browser client; `./game.sh test` parses and runs the four suites. `../mg-deathrun-maps/tools/build_courses.py --check` after any course change.
+- `./game.sh` plays offline; `./game.sh online` runs a local server and browser client; `./game.sh test` parses and runs the five suites. `../mg-deathrun-maps/tools/build_courses.py --check` after any course change.
 - `headless_courses` springs every trap on its `victim` spot and stands a runner on every `spared` spot. Run it after touching traps, the carry or the builder. [testing](docs/testing.md)
 - **Render after touching what anyone sees**: the activator's view, trap colours and the end arena were only found by a picture (`tools/shot.sh --view=activator|trap|third --board|end`).
 - After touching a camera, the view key or player collision: `tools/camera_check.sh` (cameras round every piece, armed; `mp_solidplayers` both ways; `--render` for frames). [design](docs/design.md#cameras-and-bodies)
@@ -84,5 +84,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 - `project.godot` carries no comments: the editor drops them, and any key left at its default, the first time it saves the file, so the reasons for its settings live here. Gravity stays the engine default and nothing reads it: `DrConfig.gravity` is written onto the world's own physics space, because a project setting does not travel inside a delivered pack. The renderer is `gl_compatibility`, what the delivered client runs, and lighting is tuned under it. The canvas texture filter is Nearest so the prototype grid reads as discrete squares at the distance a runner judges the next gap from. Texture imports keep `detect_3d/compress_to=0` (`[importer_defaults]` starts new ones that way) so the editor never re-imports one VRAM-compressed on a first open.
 
 ## Not yet done
+
+The Workshop's limits are in [docs/not-yet.md](docs/not-yet.md): a pack course is a course document, solo only, with no art or sound of its own.
 
 The course vote has not been tried in a browser.

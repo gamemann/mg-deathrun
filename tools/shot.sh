@@ -12,6 +12,7 @@
 #   tools/shot.sh --view=end                           # the end arena, from a runner who made it
 #   tools/shot.sh --view=end --end-wait=5              # ...once the weapon they were handed is out
 #   tools/shot.sh --view=end --end-wait=3 --fire=0.4   # ...firing: flash, tracer, impact, the counter down
+#   tools/shot.sh --view=maps --seconds=0.5            # M: the solo course list with a Workshop fixture course (Name [Pack])
 #   tools/shot.sh --view=third --board                 # with the Tab scoreboard held open
 #   tools/shot.sh --view=course --out=res://screenshots/x.png  # any --dr-* is the game's config
 #

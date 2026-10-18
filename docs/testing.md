@@ -1,6 +1,6 @@
 # Testing
 
-`./game.sh test` parses every script and runs the four suites; `./game.sh test <suite>` runs one. `../mg-deathrun-maps/tools/build_courses.py --check` confirms the courses on disk are what the builder writes.
+`./game.sh test` parses every script and runs the five suites; `./game.sh test <suite>` runs one. `../mg-deathrun-maps/tools/build_courses.py --check` confirms the courses on disk are what the builder writes.
 
 | Suite | What it covers |
 | --- | --- |
@@ -24,3 +24,5 @@
 ## Delivery
 
 dot-server-deploy's `examples/deathrun_client` boots the delivered pack, joins with a real client over a real socket, checks the courses are mounted where `_add_delivered_courses` looks, and that the client builds the server's course and traps from the document.
+
+`examples/headless_workshop` covers the Workshop against a fixture `DotContentIndex` (never the shared one): a solo pack course is listed as "Name [Pack]" and drawn, an online session lists none, a `map_kind` the game does not accept is left out, the game's own ids win, and the ballot follows the same rules. `tools/shot.sh --view=maps` renders the M menu with a fixture pack.
