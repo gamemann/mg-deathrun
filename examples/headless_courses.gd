@@ -4,6 +4,7 @@ const DrAudio := preload("../game/dr_audio.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrCourse := preload("../game/dr_course.gd")
+const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrPlayer := preload("../game/dr_player.gd")
 
@@ -41,6 +42,8 @@ func _ready() -> void:
 	DotLog.set_level(DotLog.Level.ERROR)
 	_run.call_deferred()
 
+const PUSH_CHECKS := 4
+
 
 func _run() -> void:
 	print("deathrun: every course played")
@@ -62,6 +65,7 @@ func _run() -> void:
 	_finished()
 
 	_test_baked_light(catalogue)
+	await _test_push_zone(catalogue)
 
 	var traps := 0
 	var spared := 0
@@ -81,8 +85,8 @@ func _run() -> void:
 		remove_child(_world)
 		_world.free()
 
-	var sections := 2 + courses.size() * 5
-	var checks := 5 + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
+	var sections := 3 + courses.size() * 5
+	var checks := 5 + PUSH_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -106,6 +110,52 @@ func _run() -> void:
 		code = 1
 
 	get_tree().quit(code)
+
+
+## A push zone moves a runner standing in it while its trap is out, the way its `push` says and
+## no other, and leaves them alone before the press and outside the box. Armed: the first check
+## fails if the zone pushed nobody, the second if it pushed before the press.
+func _test_push_zone(catalogue: DrCatalogue) -> void:
+	_section("a push zone")
+	var doc: Dictionary = (catalogue.courses[&"dr_practice"] as Dictionary).duplicate(true)
+	var made := DrCourseDoc._trap({
+		"id": "push_test", "button": {"at": [0.0, 1.0, 0.0]},
+		"timing": {"delay": 0.0, "out": 0.1, "hold": 6.0, "back": 0.5},
+		"parts": [{"at": [0.0, 0.0, 0.0], "size": [2000.0, 200.0, 2000.0], "push": [3.0, 0.0, 0.0], "look": "wind"}],
+	}, (doc["traps"] as Array).size())
+	_check(made.ok and not bool(made.value["parts"][0]["solid"]) and not bool(made.value["parts"][0]["lethal"]),
+		"a push part validates, and is neither solid nor lethal", str(made.error) if not made.ok else "")
+
+	if not made.ok:
+		for i in range(PUSH_CHECKS - 1):
+			_check(false, "push zone check skipped", "the trap did not validate")
+		_finished()
+		return
+
+	# A zone far bigger than the course, so wherever the round puts the runner they are in it.
+	var game := await _fresh(doc)
+	var patched: Dictionary = game.catalogue.courses[doc["id"]]
+	(patched["traps"] as Array).append(made.value)
+	game._lay_out_course()
+	var runner := game.add_player(&"u1", "Runner")
+	var activator := game.add_player(&"u3", "Activator")
+	await _begin(game, [runner], [activator])
+	await _ticks(game, int((game.config.countdown_seconds + 0.2) * TICK_RATE))
+	var index := game.stage.trap_index("push_test")
+	var before := runner.controller.state.position
+	await _ticks(game, TICK_RATE)
+	var idle := runner.controller.state.position - before
+	_check(absf(idle.x) < 0.05, "before the press, nobody is pushed", str(idle))
+
+	var pressed := game.press(index, activator.player_id)
+	var from := runner.controller.state.position
+	await _ticks(game, TICK_RATE * 2)
+	var moved := runner.controller.state.position - from
+	_check(pressed and moved.x > 2.0 and absf(moved.z) < 0.3 and absf(moved.y) < 0.3,
+		"pressed, the runner in the zone is pushed along its direction", "pressed %s, moved %s" % [pressed, moved])
+	_check(game.stage.push_at(Vector3(0.0, 0.0, 9000.0), false, game._tick) == Vector3.ZERO,
+		"and a point outside it is not pushed")
+	_finished()
 
 
 ## The committed bakes against the courses as they are now. A course edited without a rebake

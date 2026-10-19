@@ -604,6 +604,16 @@ func _draw_look(parent: Node3D, size: Vector3, look: String, face: String, tint:
 			flame.mesh = box
 			flame.material_override = _glow(tint if tint != Color.WHITE else Color(1.0, 0.45, 0.08), 0.62)
 			parent.add_child(flame)
+		"wind":
+			# Streaks along the push, not a solid-looking box: a runner reads a fan from a jump
+			# away, and a block of glass reads as a wall.
+			var air := MeshInstance3D.new()
+			air.name = "Wind"
+			var box := BoxMesh.new()
+			box.size = size
+			air.mesh = box
+			air.material_override = _glow(tint if tint != Color.WHITE else Color(0.7, 0.9, 1.0), 0.18, 0.4)
+			parent.add_child(air)
 		"liquid":
 			var pool := MeshInstance3D.new()
 			pool.name = "Liquid"
@@ -757,7 +767,8 @@ func _make_trap(index: int, spec: Dictionary) -> void:
 			# A lethal part that does not move is a hazard that is OFF until the trap runs —
 			# fire, a laser — and ON while it is out. One that moves is lethal wherever it is,
 			# because where it is IS whether it is out: spikes at rest are under the floor.
-			"switched": bool(part_spec["lethal"]) and not moving,
+			"switched": (bool(part_spec["lethal"]) or (part_spec["push"] as Vector3) != Vector3.ZERO) \
+				and not moving,
 		})
 
 	var button := _make_button(spec["button"])
@@ -1388,6 +1399,47 @@ func carry(ground_id: int, at: Vector3, tick: int) -> Vector3:
 	var before := transform_of(piece, t)
 	var after := transform_of(piece, t + dt)
 	return (after * before.affine_inverse()) * at - at
+
+
+## How far the wind moves somebody whose feet are at [param feet] during [param tick]: the sum of
+## every running push zone their capsule's middle is in, times one tick.
+##
+## [b]A displacement, like the carry.[/b] It is a pure function of the tick, the press and where
+## the player stands, added to the state in `_after_tick`, so the server and a predicting client
+## (and its replay) move the player identically. Nothing is collided and no body is pushed:
+## physics order would differ between machines.
+func push_at(feet: Vector3, crouched: bool, tick: int) -> Vector3:
+	var dt := 1.0 / float(maxi(tick_rate, 1))
+	var t := float(tick) * dt
+	var middle := feet + Vector3(0.0, (PLAYER_CROUCHED if crouched else PLAYER_HEIGHT) * 0.5, 0.0)
+	var total := Vector3.ZERO
+
+	for index in range(traps.size()):
+		if fired[index] < 0:
+			continue
+
+		var e := trap_extension(index, t)
+
+		if e < 0.5:
+			continue
+
+		var running := _running(index, t)
+
+		for part: Dictionary in traps[index]["parts"]:
+			var spec: Dictionary = part["spec"]
+			var push: Vector3 = spec["push"]
+
+			if push == Vector3.ZERO:
+				continue
+
+			var frame := part_transform(spec, e, running)
+			var local := frame.affine_inverse() * middle
+			var half: Vector3 = (spec["size"] as Vector3) * 0.5
+
+			if absf(local.x) <= half.x and absf(local.y) <= half.y and absf(local.z) <= half.z:
+				total += push * dt
+
+	return total
 
 
 ## What kills somebody standing at [param feet] on [param tick]: a trap's index,

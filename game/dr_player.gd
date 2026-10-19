@@ -299,6 +299,12 @@ func _after_tick(tick: int, state: DotFpsState) -> void:
 		if moved != Vector3.ZERO:
 			state.position += moved
 
+	# Wind, in any mode: the same kind of exact displacement as the carry, so it predicts.
+	var blown := stage.push_at(state.position, state.is_crouched(), tick)
+
+	if blown != Vector3.ZERO:
+		state.position += blown
+
 	global_position = state.position
 
 

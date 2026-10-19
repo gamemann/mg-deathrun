@@ -64,7 +64,7 @@ const PIECES := {
 const ROLES := ["deck", "pillar", "cannon", "arena", "hazard", "safe"]
 
 ## How a trap part is drawn. The shape it collides and kills with is always its box.
-const LOOKS := ["block", "spikes", "blade", "fire", "liquid"]
+const LOOKS := ["block", "spikes", "blade", "fire", "liquid", "wind"]
 
 ## Which way a part drawn as spikes points, in the part's own frame.
 const FACES := ["up", "down", "forward", "back", "left", "right"]
@@ -457,7 +457,10 @@ static func _part(source: Variant, trap_id: String, index: int) -> DotResult:
 	# Solid unless it kills. A part that kills AND is solid is a part that pushes somebody out of
 	# itself before the death test finds them inside it — and pushing depends on the order two
 	# bodies were resolved in, which two machines do not agree on.
-	var solid := bool(part.get("solid", not lethal))
+	# A push zone (a fan, a wind tunnel) is a volume, never a wall: same reasoning, and a body in
+	# the way of the wind would stop the very player it pushes.
+	var push := _v3(part.get("push", [0.0, 0.0, 0.0]))
+	var solid := bool(part.get("solid", not lethal and push == Vector3.ZERO))
 
 	var out := {
 		"at": _v3(part["at"]),
@@ -471,6 +474,7 @@ static func _part(source: Variant, trap_id: String, index: int) -> DotResult:
 		"solid": solid,
 		"move": _v3(part.get("move", [0.0, 0.0, 0.0])),
 		"spin": float(part.get("spin", 0.0)),
+		"push": push,
 	}
 
 	var turn: Variant = part.get("turn")
