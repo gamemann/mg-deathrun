@@ -27,6 +27,10 @@ const TICK := 1.0 / float(TICK_RATE)
 var _passed := 0
 var _failed := 0
 var _sections_entered := 0
+## The slowest average pace a stand-in runner may have on a course, as a share of the run speed.
+## Measured: 0.81-0.95 on the five courses; before the landing brake Ice Works ran 0.72 (27.4 s), so 0.75 catches that and any walk (0.45).
+const RUNNER_PACE_FLOOR := 0.75
+
 var _sections_finished := 0
 var _failures := PackedStringArray()
 var _world: DrGame = null
@@ -75,7 +79,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 1 + courses.size() * 5
-	var checks := 5 + courses.size() * (2 + 1 + 4 + 1) + traps + spared
+	var checks := 5 + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -196,6 +200,7 @@ func _run_course(doc: Dictionary) -> void:
 
 	var limit := game.round_limit()
 	var finished_at := -1.0
+	var start_at := bot.controller.state.position
 
 	for i in range(int(limit * TICK_RATE)):
 		idle.controller.apply_command(DotFpsCommand.new())
@@ -212,7 +217,29 @@ func _run_course(doc: Dictionary) -> void:
 		bot.is_alive(), bot.controller.state.position, int(game._bot_route.get(bot.player_id, 0))])
 	_check(finished_at > 0.0 and finished_at < limit * 0.5, "in under half the round's clock",
 		"%.1f s of %.0f" % [finished_at, limit])
+
+	# Average pace, not top speed: a bot that reaches 7 m/s for a moment and spends the rest
+	# settling, braking or waiting reads as a runner walking. The distance is the route's
+	# own length, so a course's jumps and landings are counted in the pace.
+	var average := _route_length(game, start_at) / maxf(finished_at, 0.01)
+	print("PACE %s: %.2f m/s over %.1f s" % [doc["id"], average, finished_at])
+	_check(finished_at > 0.0 and average >= game.config.run_speed * RUNNER_PACE_FLOOR,
+		"its average pace on the course is a runner's, not a walk",
+		"%.2f m/s of %.1f run speed (floor %.0f%%)" % [average, game.config.run_speed, RUNNER_PACE_FLOOR * 100.0])
 	_finished()
+
+
+## The flat length of a runner's route from [param from] through every point.
+func _route_length(game: DrGame, from: Vector3) -> float:
+	var total := 0.0
+	var last := from
+
+	for point in game.stage.route():
+		var at: Vector3 = (point as Dictionary)["at"]
+		total += Vector2(at.x - last.x, at.z - last.z).length()
+		last = at
+
+	return total
 
 
 ## Somebody at each trap's victim spot, alive until it is pressed and not after.
