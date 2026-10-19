@@ -609,7 +609,9 @@ func _test_a_covered_seat_is_not_harmed() -> void:
 	# server's snapshots is put back at each phase change (a real game scene does this itself).
 	var attach := func(_a: Variant = null, _b: Variant = null) -> void:
 		if link.get_node_or_null(NodePath(DrNetLink.NODE_NAME)) == null:
-			var _sink := DrNetLink.attached_to(link, null, false)
+			var sink := DrNetLink.attached_to(link, null, false)
+			sink.name = DrNetLink.NODE_NAME
+			link.add_child(sink)
 	attach.call()
 	link.phase_changed.connect(attach)
 	var spawned := [false]
