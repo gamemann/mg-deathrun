@@ -2,6 +2,7 @@ extends Node3D
 
 const DrCourseDoc := preload("dr_course_doc.gd")
 const DrTextures := preload("dr_textures.gd")
+const DrPaths := preload("dr_paths.gd")
 
 ## A course built from its document: the pieces, the traps and their buttons, where every
 ## moving thing is on a given tick, and the questions a round asks of them.
@@ -54,8 +55,19 @@ const KILLED_BY_NOTHING := -1
 ## dot-lighting's contact shade, loaded by path (API 4): see [method _add_contact_shade].
 const CONTACT_SHADE_SCRIPT := "res://addons/dot_lighting/runtime/dot_contact_shade.gd"
 
+## What a bake of this game's courses means beyond the document (which pieces are in it, its
+## settings in tools/lightmap_scenes.gd). Bump it and every committed bake reads as stale.
+const BAKE_VERSION := 1
+
+## Where a course's bake is, by id; rebased, so a delivered pack finds its own.
+const BAKE_PATH := "res://lightmaps/%s.res"
+
 ## The height of a button's top, above the floor its `at` names.
 const BUTTON_HEIGHT := 1.05
+
+## Whether a client looks for a course's bake at all. Off draws every course with the live sun
+## and fill alone (and is what the bake scenes are made with).
+static var use_bakes: bool = true
 
 ## Emitted when the course has been built and posed once.
 signal built()
@@ -104,6 +116,9 @@ var authoritative: bool = true
 var toy_rules: DotPropToyRules = null
 var gravity: float = 20.0
 
+## The LightmapGI laid over this course, or null: drawn with live light alone.
+var baked: LightmapGI = null
+
 var _gate: StaticBody3D = null
 var _gate_rest: Transform3D = Transform3D.IDENTITY
 
@@ -145,6 +160,9 @@ func build(p_doc: Dictionary) -> DotResult:
 	if draw_world:
 		_build_world()
 		_add_contact_shade()
+
+		if use_bakes:
+			_attach_bake()
 
 	pose_at_time(0.0)
 	built.emit()
@@ -191,6 +209,7 @@ func clear() -> void:
 	fired = PackedInt32Array()
 	_by_collider.clear()
 	doc = {}
+	baked = null
 	toys = null
 	_gate = null
 	_posed_tick = -2147483648
@@ -232,6 +251,9 @@ func _make_piece(index: int, spec: Dictionary) -> void:
 	node.name = "%s_%d" % [kind, index]
 	add_child(node)
 
+	if draw_world and is_bakeable(spec, kind):
+		_make_bakeable(node, spec["size"])
+
 	if not bool(spec.get("visible", true)):
 		for child in node.get_children():
 			if child is MeshInstance3D:
@@ -245,6 +267,88 @@ func _make_piece(index: int, spec: Dictionary) -> void:
 		_put_on_world_layer(body)
 
 	pieces.append(piece)
+
+
+## Whether a piece is drawn into the baked light: still, solid-coloured and a plain box (a
+## ramp is a box pitched). Everything that moves, flips lethal or is see-through is lit live
+## and left out: a mover, a turntable, every trap part, the gate, a ball or a cylinder, a
+## tinted-transparent or invisible piece. A baked shadow under a part that then moves away would
+## stay behind on the floor, and a moving part's own faces would carry the light of where it was.
+static func is_bakeable(spec: Dictionary, kind: String) -> bool:
+	return (kind == "box" or kind == "ramp") and bool(spec.get("visible", true)) \
+		and (spec.get("tint", Color.WHITE) as Color).a >= 1.0
+
+
+## Swaps a bakeable piece's BoxMesh for the same six faces with a second UV set
+## ([DotLightmapSheet]), in the body's own space and under a name that is the same on every
+## build: a bake names its meshes by path from the [LightmapGI]. The world-space triplanar
+## material does not read the first UVs, so it draws exactly as the BoxMesh did.
+func _make_bakeable(body: Node3D, size: Vector3) -> void:
+	for child in body.get_children():
+		if not (child is MeshInstance3D):
+			continue
+
+		var h := size * 0.5
+		var sheet := DotLightmapSheet.new()
+		var faces := [
+			[Vector3.RIGHT, Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, -h.y, h.z)],
+			[Vector3.LEFT, Vector3(-h.x, -h.y, h.z), Vector3(-h.x, h.y, h.z), Vector3(-h.x, h.y, -h.z), Vector3(-h.x, -h.y, -h.z)],
+			[Vector3.UP, Vector3(-h.x, h.y, -h.z), Vector3(-h.x, h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, h.y, -h.z)],
+			[Vector3.DOWN, Vector3(-h.x, -h.y, h.z), Vector3(-h.x, -h.y, -h.z), Vector3(h.x, -h.y, -h.z), Vector3(h.x, -h.y, h.z)],
+			[Vector3.BACK, Vector3(h.x, -h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(-h.x, h.y, h.z), Vector3(-h.x, -h.y, h.z)],
+			[Vector3.FORWARD, Vector3(-h.x, -h.y, -h.z), Vector3(-h.x, h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(h.x, -h.y, -h.z)],
+		]
+
+		for face: Array in faces:
+			sheet.face(face[1], face[2], face[3], face[4], face[0])
+
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		sheet.commit(tool)
+		var mesh := tool.commit()
+		mesh.lightmap_size_hint = sheet.size
+		(child as MeshInstance3D).mesh = mesh
+		child.name = "Mesh"
+		child.set_meta(&"dr_bakeable", true)
+		return
+
+
+## What this course's bake must have been made from: the still boxes and ramps that are in it,
+## the theme (the sky and sun are what the bake lights with, the deck colour what it bounces),
+## and the versions of everything that lays them out. The same on the machine that baked and on
+## every client, from the document alone. A trap or a mover changing does not touch it.
+func light_fingerprint() -> String:
+	var pieces_in: Array = []
+
+	for spec: Dictionary in (doc.get("pieces", []) as Array):
+		if not is_bakeable(spec, str(spec["kind"])):
+			continue
+
+		var tint: Color = spec.get("tint", Color.WHITE)
+		pieces_in.append([str(spec["kind"]), str(spec.get("role", "deck")), str(spec["at"]), str(spec["size"]),
+			float(spec["yaw"]), float(spec.get("pitch", 0.0)), tint.to_html()])
+
+	var theme: Dictionary = doc.get("theme", {})
+	var colours := {}
+
+	for key: String in theme:
+		colours[key] = (theme[key] as Color).to_html() if theme[key] is Color else theme[key]
+
+	return DotLightBake.fingerprint({
+		"dr": BAKE_VERSION, "pieces": pieces_in, "theme": colours, "light": light_document(theme),
+	})
+
+
+## The course's bake laid over it, if the game ships one made from this document.
+func _attach_bake() -> void:
+	var path := DrPaths.rebase(BAKE_PATH % String(id()))
+	var res := DotLightBake.attach(self, path, light_fingerprint())
+
+	if not res.ok:
+		return
+
+	baked = res.value
+	DotLog.debug(CHANNEL, "the course is drawn with its baked light", {"id": String(id())})
 
 
 func _collect_bodies(node: Node, into: Array) -> void:

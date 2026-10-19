@@ -18,6 +18,7 @@ extends Node
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrClient := preload("../game/dr_client.gd")
+const DrCourse := preload("../game/dr_course.gd")
 const DrGame := preload("../game/dr_game.gd")
 
 var _view := "eyes"
@@ -66,7 +67,9 @@ func _subscribe_fixture() -> void:
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--view="):
+		if arg == "--no-bake":
+			DrCourse.use_bakes = false
+		elif arg.begins_with("--view="):
 			_view = arg.trim_prefix("--view=")
 		elif arg == "--spent":
 			_spent = true

@@ -23,6 +23,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
+const BAKE_CHECKS := 4
 
 var _passed := 0
 var _failed := 0
@@ -60,6 +61,8 @@ func _run() -> void:
 	_check_sound_ids()
 	_finished()
 
+	_test_baked_light(catalogue)
+
 	var traps := 0
 	var spared := 0
 
@@ -78,8 +81,8 @@ func _run() -> void:
 		remove_child(_world)
 		_world.free()
 
-	var sections := 1 + courses.size() * 5
-	var checks := 5 + courses.size() * (3 + 1 + 4 + 1) + traps + spared
+	var sections := 2 + courses.size() * 5
+	var checks := 5 + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -103,6 +106,60 @@ func _run() -> void:
 		code = 1
 
 	get_tree().quit(code)
+
+
+## The committed bakes against the courses as they are now. A course edited without a rebake
+## still plays (the live sun alone and a WARN on every client), so nothing else would notice:
+## this does. Rebake with tools/bake_lightmaps.sh. Headless, a bake's pixels are not loaded, but
+## its fingerprint is, and attaching is refused without touching the course.
+func _test_baked_light(catalogue: DrCatalogue) -> void:
+	_section("baked light")
+	var stale := PackedStringArray()
+	var baked := PackedStringArray()
+
+	for id: StringName in catalogue.courses:
+		var path := DrCourse.BAKE_PATH % String(id)
+
+		if not ResourceLoader.exists(path):
+			continue
+
+		var course := DrCourse.new()
+		var _built := course.build(catalogue.courses[id])
+		var data := load(path) as LightmapGIData
+		baked.append(String(id))
+
+		if data == null or str(data.get_meta(DotLightBake.META_FINGERPRINT, "")) != course.light_fingerprint():
+			stale.append(String(id))
+
+		course.free()
+
+	_check(stale.is_empty(), "every committed bake was made from its course as it is now",
+		"baked %s, stale %s" % [baked, stale])
+	_check(baked.has("dr_practice"), "the practice course, the one every build has, ships a bake")
+
+	var moved := DrCourse.new()
+	var doc: Dictionary = (catalogue.courses[&"dr_practice"] as Dictionary).duplicate(true)
+	var _built_first := moved.build(doc)
+	var before := moved.light_fingerprint()
+	var shifted := false
+
+	for spec: Dictionary in moved.doc["pieces"]:
+		if DrCourse.is_bakeable(spec, str(spec["kind"])):
+			spec["at"] = (spec["at"] as Vector3) + Vector3(0.25, 0.0, 0.0)
+			shifted = true
+			break
+
+	# A mover moving is not a change of the bake; a still box moving is.
+	_check(shifted and moved.light_fingerprint() != before, "moving one still box makes the bake stale (the fingerprint changes)")
+
+	var host := Node3D.new()
+	add_child(host)
+	var res := DotLightBake.attach(host, DrCourse.BAKE_PATH % "dr_practice", before)
+	_check(not res.ok and res.error.code == DotError.CODE_UNSUPPORTED and host.get_child_count() == 0,
+		"a headless process (a server) never lays a bake over its course", "%s" % [res.error.message if not res.ok else "attached"])
+	host.free()
+	moved.free()
+	_finished()
 
 
 ## Every trap sounds like what it is, told from its parts: the traps whose machine is not in
