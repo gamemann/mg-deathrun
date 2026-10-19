@@ -62,12 +62,20 @@ const BAKE_VERSION := 1
 ## Where a course's bake is, by id; rebased, so a delivered pack finds its own.
 const BAKE_PATH := "res://lightmaps/%s.res"
 
+## dot-lighting's baker and lightmap sheet (API 5), loaded by path like the contact shade: a
+## class_name here would fail to parse this whole file under a shell whose dot-lighting is older.
+const BAKE_SCRIPT := "res://addons/dot_lighting/bake/dot_light_bake.gd"
+const SHEET_SCRIPT := "res://addons/dot_lighting/bake/dot_lightmap_sheet.gd"
+
 ## The height of a button's top, above the floor its `at` names.
 const BUTTON_HEIGHT := 1.05
 
 ## Whether a client looks for a course's bake at all. Off draws every course with the live sun
 ## and fill alone (and is what the bake scenes are made with).
 static var use_bakes: bool = true
+
+## Set by tools/lightmap_scenes.gd: build the bakeable meshes even though no bake exists yet.
+static var for_bake_scene: bool = false
 
 ## Emitted when the course has been built and posed once.
 signal built()
@@ -251,7 +259,7 @@ func _make_piece(index: int, spec: Dictionary) -> void:
 	node.name = "%s_%d" % [kind, index]
 	add_child(node)
 
-	if draw_world and is_bakeable(spec, kind):
+	if draw_world and is_bakeable(spec, kind) and _will_bake():
 		_make_bakeable(node, spec["size"])
 
 	if not bool(spec.get("visible", true)):
@@ -279,8 +287,23 @@ static func is_bakeable(spec: Dictionary, kind: String) -> bool:
 		and (spec.get("tint", Color.WHITE) as Color).a >= 1.0
 
 
+## Whether this client can and will lay a bake over this course: the addon is new enough, bakes
+## are on and one ships for it (or a bake scene is being made). Otherwise the pieces keep their
+## BoxMesh, which is what a workshop or user course always draws.
+func _will_bake() -> bool:
+	if DotAddonApi.build_level("dot_lighting") < 5 or not ResourceLoader.exists(BAKE_SCRIPT) \
+			or not ResourceLoader.exists(SHEET_SCRIPT):
+		DotLog.debug(CHANNEL, "this dot-lighting cannot bake; the course is drawn live", {"id": String(id())})
+		return false
+
+	if for_bake_scene:
+		return true
+
+	return use_bakes and ResourceLoader.exists(DrPaths.rebase(BAKE_PATH % String(id())))
+
+
 ## Swaps a bakeable piece's BoxMesh for the same six faces with a second UV set
-## ([DotLightmapSheet]), in the body's own space and under a name that is the same on every
+## (dot-lighting's `DotLightmapSheet`), in the body's own space and under a name that is the same on every
 ## build: a bake names its meshes by path from the [LightmapGI]. The world-space triplanar
 ## material does not read the first UVs, so it draws exactly as the BoxMesh did.
 func _make_bakeable(body: Node3D, size: Vector3) -> void:
@@ -289,7 +312,7 @@ func _make_bakeable(body: Node3D, size: Vector3) -> void:
 			continue
 
 		var h := size * 0.5
-		var sheet := DotLightmapSheet.new()
+		var sheet: RefCounted = (load(SHEET_SCRIPT) as GDScript).new()
 		var faces := [
 			[Vector3.RIGHT, Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(h.x, h.y, h.z), Vector3(h.x, -h.y, h.z)],
 			[Vector3.LEFT, Vector3(-h.x, -h.y, h.z), Vector3(-h.x, h.y, h.z), Vector3(-h.x, h.y, -h.z), Vector3(-h.x, -h.y, -h.z)],
@@ -300,13 +323,13 @@ func _make_bakeable(body: Node3D, size: Vector3) -> void:
 		]
 
 		for face: Array in faces:
-			sheet.face(face[1], face[2], face[3], face[4], face[0])
+			sheet.call(&"face", face[1], face[2], face[3], face[4], face[0])
 
 		var tool := SurfaceTool.new()
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-		sheet.commit(tool)
+		sheet.call(&"commit", tool)
 		var mesh := tool.commit()
-		mesh.lightmap_size_hint = sheet.size
+		mesh.lightmap_size_hint = sheet.get(&"size")
 		(child as MeshInstance3D).mesh = mesh
 		child.name = "Mesh"
 		child.set_meta(&"dr_bakeable", true)
@@ -334,7 +357,10 @@ func light_fingerprint() -> String:
 	for key: String in theme:
 		colours[key] = (theme[key] as Color).to_html() if theme[key] is Color else theme[key]
 
-	return DotLightBake.fingerprint({
+	if DotAddonApi.build_level("dot_lighting") < 5 or not ResourceLoader.exists(BAKE_SCRIPT):
+		return ""
+
+	return (load(BAKE_SCRIPT) as GDScript).call(&"fingerprint", {
 		"dr": BAKE_VERSION, "pieces": pieces_in, "theme": colours, "light": light_document(theme),
 	})
 
@@ -342,7 +368,10 @@ func light_fingerprint() -> String:
 ## The course's bake laid over it, if the game ships one made from this document.
 func _attach_bake() -> void:
 	var path := DrPaths.rebase(BAKE_PATH % String(id()))
-	var res := DotLightBake.attach(self, path, light_fingerprint())
+	if DotAddonApi.build_level("dot_lighting") < 5 or not ResourceLoader.exists(BAKE_SCRIPT):
+		return
+
+	var res: DotResult = (load(BAKE_SCRIPT) as GDScript).call(&"attach", self, path, light_fingerprint())
 
 	if not res.ok:
 		return

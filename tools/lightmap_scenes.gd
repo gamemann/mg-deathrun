@@ -54,6 +54,7 @@ func _run() -> void:
 	ids.sort()
 	var written := 0
 	DrCourse.use_bakes = false
+	DrCourse.for_bake_scene = true
 
 	for id: StringName in ids:
 		if wanted != "" and not wanted.split(",").has(String(id)):
