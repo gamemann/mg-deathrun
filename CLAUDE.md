@@ -90,3 +90,5 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 The Workshop's limits are in [docs/not-yet.md](docs/not-yet.md): a pack course is a course document, solo only, with no art or sound of its own.
 
 The course vote has not been tried in a browser.
+
+**Course documents may carry a `walkway` (2026-10-20)** for converted maps whose activators must wind through rooms: `DrCourseDoc` reads it (cap `MAX_PIECES` 2400 pieces), `DrCourse.walkway()` / `walkway_stop()` / `route_progress()` expose it, and `DrGame.bot_walk_toward` walks it; see docs/bots.md.

@@ -242,6 +242,8 @@ var _grace: Dictionary = {}
 ## Bots: player id -> the route point they are heading for, their aim error, the tick a
 ## runner entered the trap they are watching, and `[position, tick]` a second ago.
 var _bot_route: Dictionary = {}
+## Stand-in activators: player id -> the walkway point they last reached (-1: still at the spawn).
+var _bot_walk: Dictionary = {}
 var _bot_hands: Dictionary = {}
 var _bot_watch: Dictionary = {}
 var _bot_stuck: Dictionary = {}
@@ -760,7 +762,7 @@ func remove_player(player_id: StringName) -> void:
 	sides.erase(player_id)
 	_last_activators.erase(player_id)
 
-	for table in [_bot_route, _bot_hands, _bot_watch, _bot_stuck, _bot_settle, _credit, _grace]:
+	for table in [_bot_route, _bot_walk, _bot_hands, _bot_watch, _bot_stuck, _bot_settle, _credit, _grace]:
 		(table as Dictionary).erase(player_id)
 
 	player.queue_free()
@@ -1132,6 +1134,7 @@ func _place_everybody() -> void:
 
 		player.place_at(spot[0], spot[1])
 		_bot_route[player.player_id] = 0
+		_bot_walk[player.player_id] = -1
 
 		if spectate != null:
 			spectate.on_spawned(player.player_id)
@@ -1905,13 +1908,9 @@ func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
 
 	var eyes := player.eye_position()
 	var button := stage.button_point(target)
-	var flat := Vector3(button.x - eyes.x, 0.0, button.z - eyes.z)
 
-	if flat.length() > config.button_reach * 0.6:
-		command.yaw = rad_to_deg(atan2(-flat.x, -flat.z))
-		command.move = Vector2(0.0, 1.0)
+	if not bot_walk_toward(player, target, command):
 		player.wants_use = false
-		_bot_unstick(player, command)
 		return
 
 	var look := button - eyes
@@ -1947,6 +1946,40 @@ func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
 static var _MEDIUM_BOT: DotBotProfile = DotBotProfile.new()
 
 
+## Walks a stand-in activator one step toward trap [param index]'s button and says whether it
+## is there (close enough to press). A course with a `walkway` names the points to walk through
+## (forward or back, to the point that trap's button is pressed from); without one, or for a
+## button the walkway does not name, it is straight at the button.
+func bot_walk_toward(player: DrPlayer, index: int, command: DotFpsCommand) -> bool:
+	var eyes := player.eye_position()
+	var button := stage.button_point(index)
+	var goal := button
+	var points := stage.walkway()
+	var stop := stage.walkway_stop(index) if not points.is_empty() else -1
+
+	if stop >= 0:
+		var here: int = int(_bot_walk.get(player.player_id, -1))
+
+		if here != stop:
+			var next := here + (1 if here < stop else -1)
+			var point: Dictionary = points[next]
+			goal = point["at"]
+			var gap := Vector2(goal.x - player.controller.state.position.x, goal.z - player.controller.state.position.z).length()
+
+			if gap <= float(point["reach"]):
+				_bot_walk[player.player_id] = next
+
+	var flat := Vector3(goal.x - eyes.x, 0.0, goal.z - eyes.z)
+
+	if goal != button or flat.length() > config.button_reach * 0.6:
+		command.yaw = rad_to_deg(atan2(-flat.x, -flat.z))
+		command.move = Vector2(0.0, 1.0)
+		_bot_unstick(player, command)
+		return false
+
+	return true
+
+
 ## The ready trap the nearest live runner is closest to reaching.
 func _bot_target_trap() -> int:
 	var best := -1
@@ -1964,8 +1997,14 @@ func _bot_target_trap() -> int:
 
 			var at := runner.controller.state.position
 			# Ahead of a runner or around them, never wholly behind: a trap the runners have
-			# passed is not one to walk back to. Every course runs along -Z.
-			if zone.position.z > at.z + 0.5:
+			# passed is not one to walk back to. A course with a route is measured along it (it
+			# may bend); one without runs along -Z.
+			var ahead := stage.route_progress(zone.get_center())
+
+			if ahead >= 0:
+				if ahead < stage.route_progress(at):
+					continue
+			elif zone.position.z > at.z + 0.5:
 				continue
 
 			var distance := at.distance_to(zone.get_center())

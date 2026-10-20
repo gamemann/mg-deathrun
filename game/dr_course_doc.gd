@@ -34,8 +34,8 @@ const KIND_COURSE := "course"
 ## event is retransmitted until it arrives, and sixty-four kilobytes is far past a course.
 const WIRE_LIMIT := 65536
 
-## The most still pieces one document may hold.
-const MAX_PIECES := 600
+## The most still pieces one document may hold. 2400 compresses to well under WIRE_LIMIT (a 3500-piece converted map is about 52 KB); a converted map is brushes, hundreds of boxes.
+const MAX_PIECES := 2400
 
 ## The most traps, and the most parts one trap may move.
 const MAX_TRAPS := 48
@@ -237,6 +237,22 @@ static func _places(doc: Dictionary) -> DotResult:
 		})
 
 	doc["route"] = route
+
+	# The walkway: the path a stand-in activator walks, for a course whose buttons are not on one
+	# straight line. A point with a `button` (a trap id) is where to stand to press that trap.
+	var walkway: Array = []
+
+	for entry: Variant in doc.get("walkway", []):
+		if typeof(entry) != TYPE_DICTIONARY or not (entry as Dictionary).has("at"):
+			return DotResult.fail(DotError.CODE_INVALID, "A walkway point needs an `at`.")
+
+		walkway.append({
+			"at": _v3((entry as Dictionary)["at"]),
+			"button": str((entry as Dictionary).get("button", "")),
+			"reach": float((entry as Dictionary).get("reach", 1.0)),
+		})
+
+	doc["walkway"] = walkway
 	return DotResult.success(doc)
 
 

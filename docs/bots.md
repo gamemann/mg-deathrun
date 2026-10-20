@@ -14,3 +14,5 @@ Runners follow the document's `route`. **A `jump` point is where a jump LANDS**;
 ## Activators
 
 Activators walk straight along the walkway to the button of the ready trap whose zone the nearest live runner is closest to (never one wholly behind the runners), and press it once a runner has been in its zone for `bot_trap_delay` (0.25 s). Straight walking is why every course's walkway is straight; `headless_courses` walks one to every button.
+
+**A winding walkway (converted maps).** A course may carry a `walkway` list (points, the last before each button naming the trap): the activator then walks those points in order with `bot_walk_toward`, not a straight line, and `_bot_target_trap` picks the next trap by route progress (`DrCourse.route_progress`: how far along the runners' route each runner and each trap's zone is) instead of straight-line distance, because on a snaking course the nearest zone by distance is often on another floor or the far side of a wall. `headless_courses` walks the stand-in to every button the same way. The planner that writes the walkway is mg-deathrun-maps' `tools/plan_route.py`.

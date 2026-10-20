@@ -373,31 +373,41 @@ func _test_the_course_vote() -> void:
 	_check(bool(changed["ok"]) and game.stage.id() == target, "staff choosing one changes the course on the spot",
 		"%s: %s" % [target, changed.get("text", "")])
 
+	# Not the course just chosen: a ballot for the course that is playing changes nothing, and with more courses
+	# delivered the first one offered can be dr_foundry itself.
+	# The ballot holds at most max_options of the delivered courses, so vote for one that is on it.
+	var picked: Array = []  # a lambda cannot assign a captured local
 	vote.set("voters_fn", func() -> Array: return [&"7"])
 	var director: DotVoteDirector = vote.get("director")
+	director.vote_opened.connect(func(options: Array, _seconds: float) -> void:
+		for o: Variant in options:
+			if StringName(str(o)) != game.stage.id():
+				picked.append(StringName(str(o)))
+				break)
 	var opened := director.open_vote(DotVoteClock.REASON_MANUAL)
 	_check(opened.ok and director.is_voting(), "a ballot opens", opened.error.message if not opened.ok else "")
 
-	var cast := director.cast_one(&"7", &"dr_foundry")
+	var voted: StringName = picked[0] if not picked.is_empty() else &""
+	var cast := director.cast_one(&"7", voted)
 	# Everybody has voted; the director closes on its next advance, which is the server's tick.
 	director.advance(0.05)
-	_check(cast.ok and director.pending_id() == &"dr_foundry", "one vote decides it, waiting for the round's end",
-		"%s %s" % [cast.ok, director.pending_id()])
+	_check(cast.ok and director.pending_id() == voted, "one vote decides it, waiting for the round's end",
+		"%s %s [%s] %s" % [cast.ok, director.pending_id(), voted, cast.error.message if not cast.ok else ""])
 
 	# No frame between these: the stand-ins' rounds are still running, and one that started in
 	# between would lay the voted course itself and leave this check reading the rotation's.
 	vote.call("note_round_end")
-	_check(game.next_course_id == &"dr_foundry", "the round's end hands it to the world", str(game.next_course_id))
+	_check(game.next_course_id == voted, "the round's end hands it to the world", str(game.next_course_id))
 
 	game.call("_lay_out_course")
-	_check(game.stage.id() == &"dr_foundry" and game.next_course_id == &"",
+	_check(game.stage.id() == voted and game.next_course_id == &"",
 		"and the next course laid is the one voted for, once", "%s / %s" % [game.stage.id(), game.next_course_id])
 
 	# Rock the vote, typed at the console as a player's !rtv reaches it. Under MANUAL the
 	# director opens nothing itself, a passed rtv included: it answered "Rocked. 1 of 1." and
 	# no ballot came. Past dot-vote's cooldown between two ballots, on the director alone so
 	# the course's own ballot timer does not open one first.
-	_check(director.current_id() == &"dr_foundry" and not director.is_voting(),
+	_check(director.current_id() == voted and not director.is_voting(),
 		"the new course starts the vote over", str(director.current_id()))
 	vote.set("voters_fn", func() -> Array: return [&"console"])
 	director.advance(director.rules.vote_cooldown_sec + 0.1)

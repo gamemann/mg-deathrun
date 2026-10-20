@@ -1579,6 +1579,42 @@ func route() -> Array:
 	return doc.get("route", [])
 
 
+## The walkway a stand-in activator follows, as the document gives it (empty: straight at the button).
+func walkway() -> Array:
+	return doc.get("walkway", [])
+
+
+## The walkway point where trap [param index]'s button is pressed from, or -1.
+func walkway_stop(index: int) -> int:
+	var trap_id := str((traps[index]["spec"] as Dictionary)["id"])
+	var points := walkway()
+
+	for i in range(points.size()):
+		if str((points[i] as Dictionary)["button"]) == trap_id:
+			return i
+
+	return -1
+
+
+## How far along the route [param point] is: the index of the nearest route point, or -1 for a
+## course without a route. Nearest by flat distance with height counted double, so a ledge
+## above a route point is not mistaken for the floor beside it.
+func route_progress(point: Vector3) -> int:
+	var points := route()
+	var best := -1
+	var best_distance := INF
+
+	for i in range(points.size()):
+		var at: Vector3 = (points[i] as Dictionary)["at"]
+		var distance := Vector2(at.x - point.x, at.z - point.z).length() + 2.0 * absf(at.y - point.y)
+
+		if distance < best_distance:
+			best_distance = distance
+			best = i
+
+	return best
+
+
 ## Roughly where the middle of everything is, and how far it reaches. For an overview camera.
 func bounds() -> AABB:
 	var box := AABB()

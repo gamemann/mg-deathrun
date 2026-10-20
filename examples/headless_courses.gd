@@ -409,16 +409,21 @@ func _walk_to_every_button(doc: Dictionary) -> void:
 
 		# 15 s, and the time a run at about 5 m/s takes for a long way between two buttons
 		var budget := TICK_RATE * (15 + int(maxf(0.0, Vector2(button.x - activator.eye_position().x, button.z - activator.eye_position().z).length() - 60.0) / 5.0))
+		# a walkway's own length is walked too, to the button and (for the next) back or on
+		var walkway := game.stage.walkway()
+		for w in range(1, walkway.size()):
+			budget += int(TICK_RATE * ((walkway[w]["at"] as Vector3).distance_to(walkway[w - 1]["at"]) / 4.0))
+
 		for i in range(budget):
 			var eyes := activator.eye_position()
 			var look := button - eyes
-			var flat := Vector3(look.x, 0.0, look.z)
 			var command := DotFpsCommand.new()
 			command.yaw = rad_to_deg(atan2(-look.x, -look.z))
 			command.pitch = clampf(rad_to_deg(asin(clampf(look.normalized().y, -1.0, 1.0))), -89.0, 89.0)
 
-			if flat.length() > game.config.button_reach * 0.6:
-				command.move = Vector2(0.0, 1.0)
+			# The stand-in's own walk (the course's walkway, or straight): the check is that it works.
+			if not game.bot_walk_toward(activator, index, command):
+				pass
 			elif game.stage.button_for(eyes, activator.aim_direction(), game.config.button_reach,
 					game.config.button_cone) == index:
 				reached = true
