@@ -43,6 +43,7 @@ func _ready() -> void:
 	_run.call_deferred()
 
 const PUSH_CHECKS := 4
+const TELEPORT_CHECKS := 5
 
 
 func _run() -> void:
@@ -66,6 +67,7 @@ func _run() -> void:
 
 	_test_baked_light(catalogue)
 	await _test_push_zone(catalogue)
+	await _test_teleport_pad(catalogue)
 
 	var traps := 0
 	var spared := 0
@@ -85,8 +87,8 @@ func _run() -> void:
 		remove_child(_world)
 		_world.free()
 
-	var sections := 3 + courses.size() * 5
-	var checks := 5 + PUSH_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
+	var sections := 4 + courses.size() * 5
+	var checks := 5 + PUSH_CHECKS + TELEPORT_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
 	print("")
 	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
@@ -110,6 +112,36 @@ func _run() -> void:
 		code = 1
 
 	get_tree().quit(code)
+
+
+## A teleport pad sends whoever stands on it to its `to`, facing its `heading`, and nobody beside
+## it, a jump above it or under it; `for` keeps one side from using it.
+func _test_teleport_pad(catalogue: DrCatalogue) -> void:
+	_section("a teleport pad")
+	var doc: Dictionary = (catalogue.courses[&"dr_practice"] as Dictionary).duplicate(true)
+	var made := DrCourseDoc._piece({
+		"kind": "teleport", "at": [0.0, 0.0, 0.0], "size": [4.0, 0.2, 4.0], "to": [50.0, 5.0, 60.0],
+		"heading": 90.0, "for": "runners",
+	}, (doc["pieces"] as Array).size())
+	_check(made.ok, "a teleport piece validates", str(made.error) if not made.ok else "")
+
+	if not made.ok:
+		for i in range(TELEPORT_CHECKS - 1):
+			_check(false, "teleport check skipped", "the piece did not validate")
+		_finished()
+		return
+
+	var game := await _fresh(doc)
+	(game.catalogue.courses[doc["id"]]["pieces"] as Array).append(made.value)
+	game._lay_out_course()
+	var top := Vector3(0.0, 0.1, 0.0)
+	var sent: Array = game.stage.teleport_at(top)
+	_check(sent.size() == 2 and (sent[0] as Vector3).is_equal_approx(Vector3(50.0, 5.0, 60.0)) \
+		and is_equal_approx(float(sent[1]), 90.0), "on it, a runner is sent to its destination", str(sent))
+	_check(game.stage.teleport_at(top, false).is_empty(), "a pad for runners does not send an activator")
+	_check(game.stage.teleport_at(top + Vector3(0.0, 2.5, 0.0)).is_empty(), "two and a half metres above it, nobody is")
+	_check(game.stage.teleport_at(top + Vector3(3.0, 0.0, 0.0)).is_empty(), "three metres beside it, nobody is")
+	_finished()
 
 
 ## A push zone moves a runner standing in it while its trap is out, the way its `push` says and

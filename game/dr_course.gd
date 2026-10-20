@@ -238,7 +238,7 @@ func _make_piece(index: int, spec: Dictionary) -> void:
 	var piece := {"index": index, "kind": kind, "spec": spec, "node": null, "moving": false}
 
 	match kind:
-		"box":
+		"box", "teleport":
 			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], 0.0, role, spec)
 		"ramp":
 			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], float(spec["pitch"]), role, spec)
@@ -1492,6 +1492,32 @@ func lethal_at(feet: Vector3, crouched: bool, tick: int) -> int:
 			return KILLED_BY_COURSE
 
 	return KILLED_BY_NOTHING
+
+
+## Where a teleport pad under [param feet] sends whoever stands on it, as `[position, heading]`,
+## or an empty array when they are on none. Feet within the pad's footprint and between a little
+## under its top and a metre over it: a runner jumping across the pad's corner is still sent, one a
+## long way under it (falling past) is not. The same piece as mg-wipeout's; dot-map is where a
+## shared one belongs once it is free to take it. [param runner] picks the pads meant for that side.
+func teleport_at(feet: Vector3, runner: bool = true) -> Array:
+	for piece in pieces:
+		if str(piece["kind"]) != "teleport":
+			continue
+
+		var spec: Dictionary = piece["spec"]
+		var side := str(spec.get("for", ""))
+
+		if (side == "runners" and not runner) or (side == "activators" and runner):
+			continue
+
+		var size: Vector3 = spec["size"]
+		var local := _yaw_basis(float(spec["yaw"])).inverse() * (feet - (spec["at"] as Vector3))
+
+		if absf(local.x) <= size.x * 0.5 and absf(local.z) <= size.z * 0.5 \
+				and local.y >= size.y * 0.5 - 0.3 and local.y <= size.y * 0.5 + 1.0:
+			return [spec["to"], float(spec.get("heading", 0.0))]
+
+	return []
 
 
 ## Whether a capsule from [param bottom] to [param top] (both sphere centres) touches a box.

@@ -58,6 +58,9 @@ const PIECES := {
 	"turntable": ["at", "radius", "speed"],
 	# A volume that kills whoever is in it, always: a spike pit, a pool, a drop.
 	"kill": ["at", "size"],
+	# A pad that moves whoever steps on it to `to` (their feet), facing `heading` degrees: where
+	# a map hands people on to its next stretch. Solid and still; it is a place, not a machine.
+	"teleport": ["at", "size", "to"],
 }
 
 ## The roles a surface can be drawn as. See [DrTextures.Role].
@@ -286,7 +289,7 @@ static func _piece(source: Variant, index: int) -> DotResult:
 				DotError.CODE_INVALID, "Piece %d (%s) has no `%s`." % [index, kind, field]
 			)
 
-	var role := str(piece.get("role", "hazard" if kind == "kill" else "deck"))
+	var role := str(piece.get("role", "hazard" if kind == "kill" else ("safe" if kind == "teleport" else "deck")))
 
 	if not ROLES.has(role):
 		return DotResult.fail(
@@ -301,6 +304,15 @@ static func _piece(source: Variant, index: int) -> DotResult:
 	if piece.has("visible"):
 		out["visible"] = bool(piece["visible"])
 
+	# A pad may be for one side only: the runners' way on is not the activator's.
+	if kind == "teleport":
+		var side := str(piece.get("for", ""))
+
+		if side != "" and side != "runners" and side != "activators":
+			return DotResult.fail(DotError.CODE_INVALID, "Piece %d is a teleport for \"%s\"." % [index, side], "for: runners, activators or nothing")
+
+		out["for"] = side
+
 	if kind == "kill":
 		var look := str(piece.get("look", "spikes"))
 
@@ -313,13 +325,13 @@ static func _piece(source: Variant, index: int) -> DotResult:
 	# would travel to every client and be ignored by both ends.
 	for key: String in piece:
 		match key:
-			"kind", "role", "yaw", "look", "visible":
+			"kind", "role", "yaw", "look", "visible", "for":
 				pass
 			"at", "from", "to", "size":
 				out[key] = _v3(piece[key])
 			"tint":
 				out[key] = _colour(piece[key], Color.WHITE)
-			"phase", "radius", "height", "speed", "pitch", "period", "thickness":
+			"phase", "radius", "height", "speed", "pitch", "period", "thickness", "heading":
 				out[key] = float(piece[key])
 			_:
 				pass

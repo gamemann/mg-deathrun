@@ -1310,6 +1310,21 @@ func _watch_course() -> void:
 		if player.at_end:
 			continue
 
+		# A teleport pad moves whoever is on it. The destination is not on a pad, so nobody is
+		# sent twice; a stand-in carries on from the route point nearest where it landed.
+		var as_runner := int(sides.get(id, 0)) == RUNNERS
+		var sent := stage.teleport_at(feet, as_runner)
+
+		if not sent.is_empty():
+			player.place_at(sent[0] as Vector3, float(sent[1]))
+
+			if player.is_bot and as_runner:
+				_bot_route[player.player_id] = _route_after(sent[0] as Vector3, int(_bot_route.get(player.player_id, 0)))
+			elif player.is_bot:
+				_bot_walk[player.player_id] = _walk_after(sent[0] as Vector3, int(_bot_walk.get(player.player_id, -1)))
+
+			continue
+
 		_note_reach(id, feet)
 
 		var lethal := stage.lethal_at(feet, player.controller.state.is_crouched(), _tick)
@@ -1325,6 +1340,40 @@ func _watch_course() -> void:
 		if int(sides.get(id, 0)) == RUNNERS and stage.in_finish(feet) \
 				and (phase == Phase.RUN or phase == Phase.SHOWDOWN):
 			_finish(player)
+
+
+## The route point a stand-in sent to [param landed] carries on to: the nearest one at or after
+## [param from_index], so it never turns back for a point it has already passed.
+func _route_after(landed: Vector3, from_index: int) -> int:
+	var route := stage.route()
+	var best := from_index
+	var best_distance := INF
+
+	for i in range(from_index, route.size()):
+		var distance := ((route[i] as Dictionary)["at"] as Vector3).distance_to(landed)
+
+		if distance < best_distance:
+			best_distance = distance
+			best = i
+
+	return best
+
+
+## The walkway point a stand-in activator sent to [param landed] carries on from: the nearest one
+## at or after [param from_index], as it has already walked everything before.
+func _walk_after(landed: Vector3, from_index: int) -> int:
+	var points := stage.walkway()
+	var best := from_index
+	var best_distance := INF
+
+	for i in range(maxi(from_index, 0), points.size()):
+		var distance := ((points[i] as Dictionary)["at"] as Vector3).distance_to(landed)
+
+		if distance < best_distance:
+			best_distance = distance
+			best = i
+
+	return best
 
 
 ## Remembers the running trap somebody is in the reach of, for [constant CREDIT_SECONDS].
