@@ -104,6 +104,9 @@ var link: Node = null
 var _offline: bool = true
 var _sampler: DotFpsSampler = null
 
+## The last [member DrPlayer.warps] this client re-aimed its mouse for.
+var _seen_warps: int = 0
+
 ## Which session this client is, once the server has said. -1 until then, so nothing matches
 ## before it does.
 var _watch_id: int = -1
@@ -1149,6 +1152,13 @@ func _physics_process(delta: float) -> void:
 			continue
 
 		bridge.client_tick(net.clock.input_tick() - (ticks - 1 - i), move, _slot, _use)
+
+	# A teleport turns the predicted body in the tick; the mouse's own angles are this sampler's,
+	# and the next command would turn them back. Read after the tick, so a replay that crossed
+	# the same teleport re-aims to wherever the body is looking by then and costs no turn.
+	if player != null and _sampler != null and player.warps != _seen_warps:
+		_seen_warps = player.warps
+		_sampler.look_at_angles(player.controller.state.yaw, player.controller.state.pitch)
 
 	_drive_view_model(move)
 

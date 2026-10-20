@@ -72,6 +72,10 @@ var entity_id: int = 0
 ## interpolator draws a teleport as one instead of as a flight across the course.
 var warps: int = 0
 
+## Set by the tick that sent them through a teleport, cleared by [DrGame] once a stand-in has
+## picked its route up from the landing. The tick itself moves them; this is only the note.
+var teleported: bool = false
+
 ## Whether they have crossed the finish this round. Server side; replicated.
 var finished: bool = false
 
@@ -305,7 +309,49 @@ func _after_tick(tick: int, state: DotFpsState) -> void:
 	if blown != Vector3.ZERO:
 		state.position += blown
 
+	# A teleport, last: after the carry and the wind, so a floor that carried someone onto a pad
+	# sends them from where they ended up. The same pure function of position on the server and
+	# on a predicting client, so neither has to be told.
+	var sent := stage.teleport_at(state.position, team == RUNNER_TEAM)
+
+	if not sent.is_empty():
+		_go_through(state, sent)
+
 	global_position = state.position
+
+
+## [constant DrGame.RUNNERS]. Not read from there: DrGame preloads this file.
+const RUNNER_TEAM := 1
+
+
+## Puts [param state] where a teleport sends it: the spot, the heading, the air (a pad is not
+## ground, and `ground_id` would carry them with the floor they left), and either no velocity
+## or the one they came with, per the pad's `keep`.
+##
+## [b]The state, in the tick[/b], and not [method place_at] from [DrGame]: that moved the server's
+## copy a tick after the fact and left a predicting client to be corrected across the course.
+## Here the client lands in the same tick as the server and reconciliation replays the same
+## jump.
+func _go_through(state: DotFpsState, sent: Array) -> void:
+	var heading := float(sent[1])
+	state.position = sent[0] as Vector3
+
+	if not bool(sent[2]):
+		state.velocity = Vector3.ZERO
+
+	state.mode = DotFpsState.Mode.AIR
+	state.ground_id = 0
+	state.time_since_grounded = 0.0
+	state.yaw = heading
+	state.pitch = 0.0
+	warps += 1
+	teleported = true
+
+	if sampler != null:
+		sampler.look_at_angles(heading, 0.0)
+
+	if controller.view != null:
+		controller.view.snap()
 
 
 func delta_for_tick() -> float:

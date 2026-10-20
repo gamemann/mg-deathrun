@@ -238,8 +238,11 @@ func _make_piece(index: int, spec: Dictionary) -> void:
 	var piece := {"index": index, "kind": kind, "spec": spec, "node": null, "moving": false}
 
 	match kind:
-		"box", "teleport":
+		"box":
 			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], 0.0, role, spec)
+		"teleport":
+			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], 0.0, role, spec) \
+				if bool(spec.get("solid", true)) else _trigger_volume(spec)
 		"ramp":
 			piece["node"] = _static_box(spec["at"], spec["size"], spec["yaw"], float(spec["pitch"]), role, spec)
 		"ball":
@@ -558,6 +561,13 @@ func _moving_disc(radius: float, thickness: float, role: DrTextures.Role) -> Sta
 
 
 ## A volume that kills: drawn as what it is, never solid.
+func _trigger_volume(spec: Dictionary) -> Node3D:
+	var root := Node3D.new()
+	root.set_meta(&"dot_no_collision", true)
+	root.transform = Transform3D(_yaw_basis(float(spec["yaw"])), spec["at"])
+	return root
+
+
 func _killer(spec: Dictionary) -> Node3D:
 	var root := Node3D.new()
 	# Measured by `lethal_at`, never collided: a pit's spikes or pool have no shape on purpose.
@@ -1494,11 +1504,14 @@ func lethal_at(feet: Vector3, crouched: bool, tick: int) -> int:
 	return KILLED_BY_NOTHING
 
 
-## Where a teleport pad under [param feet] sends whoever stands on it, as `[position, heading]`,
-## or an empty array when they are on none. Feet within the pad's footprint and between a little
-## under its top and a metre over it: a runner jumping across the pad's corner is still sent, one a
-## long way under it (falling past) is not. The same piece as mg-wipeout's; dot-map is where a
-## shared one belongs once it is free to take it. [param runner] picks the pads meant for that side.
+## Where a teleport under [param feet] sends whoever is in it, as `[position, heading, keep]`,
+## or an empty array when they are in none. A solid pad takes feet within its footprint and
+## between a little under its top and a metre over it (a runner jumping across its corner is
+## still sent, one a long way under it, falling past, is not); a trigger volume (`solid` false)
+## takes feet inside its box. `keep` says whether their velocity goes with them. Pure in the
+## position: the tick calls it on the server and on a predicting client alike. The same piece as
+## mg-wipeout's; dot-map is where a shared one belongs once it is free to take it.
+## [param runner] picks the pads meant for that side.
 func teleport_at(feet: Vector3, runner: bool = true) -> Array:
 	for piece in pieces:
 		if str(piece["kind"]) != "teleport":
@@ -1510,12 +1523,8 @@ func teleport_at(feet: Vector3, runner: bool = true) -> Array:
 		if (side == "runners" and not runner) or (side == "activators" and runner):
 			continue
 
-		var size: Vector3 = spec["size"]
-		var local := _yaw_basis(float(spec["yaw"])).inverse() * (feet - (spec["at"] as Vector3))
-
-		if absf(local.x) <= size.x * 0.5 and absf(local.z) <= size.z * 0.5 \
-				and local.y >= size.y * 0.5 - 0.3 and local.y <= size.y * 0.5 + 1.0:
-			return [spec["to"], float(spec.get("heading", 0.0))]
+		if DrCourseDoc.pad_contains(spec, feet):
+			return [spec["to"], float(spec.get("heading", 0.0)), bool(spec.get("keep", false))]
 
 	return []
 

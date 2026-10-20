@@ -25,8 +25,8 @@ const DrRequest := preload("../game/net/dr_request.gd")
 ##
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
-const SECTIONS := 12
-const CHECKS := 55
+const SECTIONS := 13
+const CHECKS := 61
 
 const CLIENT_PEER := 7
 const SESSION := 42
@@ -86,6 +86,7 @@ func _run() -> void:
 		await _test_a_carry_is_predicted()
 		await _test_the_end_crosses()
 		await _test_the_toys_reach_the_client()
+		await _test_a_teleport_is_predicted()
 		await _test_leaving()
 
 	OS.remove_logger(errors)
@@ -566,6 +567,48 @@ func _test_a_hit_is_the_shooters() -> void:
 	target_health.cannot_die = false
 	_server_bridge.remove_peer(BYSTANDER_PEER)
 	await _steps(2)
+	_finished()
+
+
+## A trigger volume in the corridor: a runner who walks into it is sent by their own prediction in
+## the tick they cross it, and the server, deciding the same from the same position, agrees.
+## The pad is added to the server's document and the course laid out again, so it reaches the
+## client the way every course does, as the document.
+func _test_a_teleport_is_predicted() -> void:
+	_section("a teleport is decided by the tick on both ends: the runner lands where the server says")
+	var made := DrCourseDoc._piece({
+		"kind": "teleport", "at": [0.0, 0.9, -6.0], "size": [3.0, 1.8, 1.0], "to": [-1.5, 0.1, 4.0],
+		"heading": 90.0, "solid": false, "for": "runners",
+	}, 0)
+	var id := StringName(str(_server_game.stage.doc.get("id", "")))
+	(_server_game.catalogue.courses[id]["pieces"] as Array).append(made.value)
+	_server_game._lay_out_course()
+	await _steps(8)
+	await _wait_for_a_round()
+	var sent := _client_game.stage.teleport_at(Vector3(0.0, 0.1, -6.0))
+	_check(sent.size() == 3 and (sent[0] as Vector3).is_equal_approx(Vector3(-1.5, 0.1, 4.0)),
+		"the pad arrived with the course, as the same trigger and destination", str(sent))
+
+	var mine := _mine()
+	var server_me: DrPlayer = _server_game.players[DrNetBridge.player_key(SESSION)]
+	server_me.place_at(Vector3(0.0, 0.1, -2.0), 0.0)
+	await _steps(20)
+	var warps_before := mine.warps
+	var forward := DotFpsCommand.new()
+	forward.move = Vector2(0.0, 1.0)
+	await _steps(40, forward)
+	await _steps(30)
+	_check(mine.warps > warps_before, "the client's own tick sent it, not only a snapshot", "%d -> %d" % [warps_before, mine.warps])
+	var landed := Vector2(mine.controller.state.position.x + 1.5, mine.controller.state.position.z - 4.0).length()
+	_check(landed < 1.0, "and it stands at the destination", "%.2f m from it" % landed)
+	var apart := mine.controller.state.position.distance_to(server_me.controller.state.position)
+	_check(apart < 0.25, "where the server has it too", "%.3f m" % apart)
+	# The scripted commands here always say yaw 0, so the motor takes the heading back; a real client's
+	# sampler is re-aimed (dr_client) and the heading itself is checked in headless_courses. What must hold
+	# here is that both ends agree on the facing.
+	_check(absf(angle_difference(deg_to_rad(mine.controller.state.yaw), deg_to_rad(server_me.controller.state.yaw))) < 0.2,
+		"client and server face the same way after it", "%.1f / %.1f" % [mine.controller.state.yaw, server_me.controller.state.yaw])
+	_check(server_me.is_alive(), "and nobody died of the trip")
 	_finished()
 
 

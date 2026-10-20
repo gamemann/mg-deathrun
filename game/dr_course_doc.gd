@@ -145,6 +145,15 @@ static func validate(source: Dictionary) -> DotResult:
 
 	doc["pieces"] = normalised
 
+	# A destination inside a pad would send whoever lands straight on, every tick, for ever.
+	for pad: Dictionary in normalised:
+		if str(pad["kind"]) != "teleport":
+			continue
+
+		for other: Dictionary in normalised:
+			if str(other["kind"]) == "teleport" and pad_contains(other, pad["to"]):
+				return _refuse("a teleport lands inside a teleport (at %s)" % pad["to"], doc)
+
 	var traps: Variant = doc.get("traps", [])
 
 	if typeof(traps) != TYPE_ARRAY:
@@ -312,6 +321,10 @@ static func _piece(source: Variant, index: int) -> DotResult:
 			return DotResult.fail(DotError.CODE_INVALID, "Piece %d is a teleport for \"%s\"." % [index, side], "for: runners, activators or nothing")
 
 		out["for"] = side
+		# Whether velocity goes through with them, and whether the pad is a floor (a trigger
+		# volume is not: it is walked into, like a doorway the map teleports through).
+		out["keep"] = bool(piece.get("keep", false))
+		out["solid"] = bool(piece.get("solid", true))
 
 	if kind == "kill":
 		var look := str(piece.get("look", "spikes"))
@@ -325,7 +338,7 @@ static func _piece(source: Variant, index: int) -> DotResult:
 	# would travel to every client and be ignored by both ends.
 	for key: String in piece:
 		match key:
-			"kind", "role", "yaw", "look", "visible", "for":
+			"kind", "role", "yaw", "look", "visible", "for", "keep", "solid":
 				pass
 			"at", "from", "to", "size":
 				out[key] = _v3(piece[key])
@@ -671,3 +684,28 @@ static func _refuse(why: String, doc: Dictionary) -> DotResult:
 	return DotResult.fail(
 		DotError.CODE_INVALID, "The document is refused: %s." % why, str(doc.get("id", "?"))
 	)
+
+
+## Whether [param feet] is in the teleport [param spec] (a validated piece). A solid pad takes
+## feet within its footprint and between a little under its top and a metre over it. A trigger
+## volume (`solid` false) is the map's own box grown by a player's body, the way a brush trigger
+## is touched: 0.4 m sideways and 1.8 m down, because a thin pane at chest height is walked
+## through by feet that never reach it. Here and not in DrCourse because the validator asks it of
+## every destination and DrCourse already preloads this file.
+static func pad_contains(spec: Dictionary, feet: Vector3) -> bool:
+	var size: Vector3 = spec["size"]
+	var local := Basis(Vector3.UP, deg_to_rad(float(spec["yaw"]))).inverse() * (feet - (spec["at"] as Vector3))
+	var solid := bool(spec.get("solid", true))
+	var sideways := 0.0 if solid else BODY_RADIUS
+
+	if absf(local.x) > size.x * 0.5 + sideways or absf(local.z) > size.z * 0.5 + sideways:
+		return false
+
+	if solid:
+		return local.y >= size.y * 0.5 - 0.3 and local.y <= size.y * 0.5 + 1.0
+
+	return local.y >= -size.y * 0.5 - BODY_HEIGHT and local.y <= size.y * 0.5
+
+## A player's half width and height, for a trigger volume (see [method pad_contains]).
+const BODY_RADIUS := 0.4
+const BODY_HEIGHT := 1.8

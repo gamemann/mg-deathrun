@@ -1379,18 +1379,17 @@ func _watch_course() -> void:
 		if player.at_end:
 			continue
 
-		# A teleport pad moves whoever is on it. The destination is not on a pad, so nobody is
-		# sent twice; a stand-in carries on from the route point nearest where it landed.
-		var as_runner := int(sides.get(id, 0)) == RUNNERS
-		var sent := stage.teleport_at(feet, as_runner)
-
-		if not sent.is_empty():
-			player.place_at(sent[0] as Vector3, float(sent[1]))
+		# A teleport already moved them, inside their own tick (DrPlayer._after_tick: the same on
+		# a predicting client); what is left for the server is a stand-in, which carries on from
+		# the route point nearest where it landed.
+		if player.teleported:
+			player.teleported = false
+			var as_runner := int(sides.get(id, 0)) == RUNNERS
 
 			if player.is_bot and as_runner:
-				_bot_route[player.player_id] = _route_after(sent[0] as Vector3, int(_bot_route.get(player.player_id, 0)))
+				_bot_route[player.player_id] = _route_after(feet, int(_bot_route.get(player.player_id, 0)))
 			elif player.is_bot:
-				_bot_walk[player.player_id] = _walk_after(sent[0] as Vector3, int(_bot_walk.get(player.player_id, -1)))
+				_bot_walk[player.player_id] = _walk_after(feet, int(_bot_walk.get(player.player_id, -1)))
 
 			continue
 

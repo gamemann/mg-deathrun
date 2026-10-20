@@ -43,7 +43,7 @@ func _ready() -> void:
 	_run.call_deferred()
 
 const PUSH_CHECKS := 4
-const TELEPORT_CHECKS := 5
+const TELEPORT_CHECKS := 10
 
 
 func _run() -> void:
@@ -141,11 +141,46 @@ func _test_teleport_pad(catalogue: DrCatalogue) -> void:
 	game._lay_out_course()
 	var top := Vector3(0.0, 0.1, 0.0)
 	var sent: Array = game.stage.teleport_at(top)
-	_check(sent.size() == 2 and (sent[0] as Vector3).is_equal_approx(Vector3(50.0, 5.0, 60.0)) \
+	_check(sent.size() == 3 and (sent[0] as Vector3).is_equal_approx(Vector3(50.0, 5.0, 60.0)) \
 		and is_equal_approx(float(sent[1]), 90.0), "on it, a runner is sent to its destination", str(sent))
 	_check(game.stage.teleport_at(top, false).is_empty(), "a pad for runners does not send an activator")
 	_check(game.stage.teleport_at(top + Vector3(0.0, 2.5, 0.0)).is_empty(), "two and a half metres above it, nobody is")
 	_check(game.stage.teleport_at(top + Vector3(3.0, 0.0, 0.0)).is_empty(), "three metres beside it, nobody is")
+
+	# A destination inside a teleport would send them on again every tick: the document is refused.
+	var looped: Dictionary = (catalogue.courses[&"dr_practice"] as Dictionary).duplicate(true)
+	var loop_pad: Dictionary = made.value.duplicate(true)
+	loop_pad["to"] = Vector3(0.0, 0.1, 0.0)
+	(looped["pieces"] as Array).append(loop_pad)
+	_check(not DrCourseDoc.validate(looped).ok, "a teleport that lands inside a teleport is refused")
+
+	# Trigger volumes, walked into: one that zeroes velocity, one that keeps it.
+	var stop: Dictionary = DrCourseDoc._piece({"kind": "teleport", "at": [-1.8, 1.0, 4.0], "size": [1.0, 2.0, 1.0],
+		"to": [1.5, 0.1, 6.5], "heading": 180.0, "solid": false}, 0).value
+	var keep: Dictionary = DrCourseDoc._piece({"kind": "teleport", "at": [1.8, 1.0, 4.0], "size": [1.0, 2.0, 1.0],
+		"to": [0.0, 0.1, 7.0], "heading": 0.0, "solid": false, "keep": true}, 0).value
+	(game.catalogue.courses[doc["id"]]["pieces"] as Array).append_array([stop, keep])
+	game._lay_out_course()
+	_check(game.stage.teleport_at(Vector3(-1.8, 1.9, 4.0)).size() == 3 and game.stage.teleport_at(Vector3(-1.8, 2.6, 4.0)).is_empty(),
+		"a trigger volume sends whoever is inside its box, and not above it")
+	var runner := game.add_player(&"u1", "Runner")
+	var activator := game.add_player(&"u3", "Activator")
+	await _begin(game, [runner], [activator])
+	await _ticks(game, int((game.config.countdown_seconds + 0.2) * TICK_RATE))
+	runner.place_at(Vector3(-1.8, 0.1, 4.0), 0.0)
+	runner.controller.state.velocity = Vector3(0.0, 0.0, -5.0)
+	await _ticks(game, 1)
+	var there := runner.controller.state.position
+	_check(Vector2(there.x - 1.5, there.z - 6.5).length() < 0.3 and absf(angle_difference(deg_to_rad(runner.controller.state.yaw), PI)) < 0.1,
+		"a runner who is in it is sent by their own tick, facing its heading", "%s yaw %.0f" % [there, runner.controller.state.yaw])
+	_check(Vector2(runner.controller.state.velocity.x, runner.controller.state.velocity.z).length() < 0.5,
+		"and lands still", str(runner.controller.state.velocity))
+	runner.place_at(Vector3(1.8, 0.1, 4.0), 0.0)
+	runner.controller.state.velocity = Vector3(0.0, 0.0, -5.0)
+	await _ticks(game, 1)
+	_check(runner.controller.state.position.distance_to(Vector3(0.0, 0.1, 7.0)) < 0.4
+			and Vector2(runner.controller.state.velocity.x, runner.controller.state.velocity.z).length() > 3.0,
+		"one that keeps velocity lands moving", str(runner.controller.state.velocity))
 	_finished()
 
 
