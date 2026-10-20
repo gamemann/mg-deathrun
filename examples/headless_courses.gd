@@ -43,7 +43,7 @@ func _ready() -> void:
 	_run.call_deferred()
 
 const PUSH_CHECKS := 4
-const TELEPORT_CHECKS := 17
+const TELEPORT_CHECKS := 19
 
 
 func _run() -> void:
@@ -215,6 +215,21 @@ func _test_teleport_pad(catalogue: DrCatalogue) -> void:
 	_check(runner.controller.state.position.distance_to(Vector3(0.0, 0.1, 7.0)) < 0.4
 			and Vector2(runner.controller.state.velocity.x, runner.controller.state.velocity.z).length() > 3.0,
 		"one that keeps velocity lands moving", str(runner.controller.state.velocity))
+	# A replayed warp must not re-aim the mouse: a correction re-runs old ticks.
+	var sampler := DotFpsSampler.new(runner.controller.tunables)
+	runner.controller.sampler = sampler
+	runner.place_at(Vector3(-1.8, 0.1, 4.0), 0.0)
+	sampler.look_at_angles(33.0, 5.0)
+	runner.controller.begin_replay()
+	await _ticks(game, 1)
+	runner.controller.end_replay()
+	_check(runner.warps > 0 and is_equal_approx(sampler.yaw, 33.0),
+		"a warp replayed in a correction leaves the player's look alone", "%.1f" % sampler.yaw)
+	runner.place_at(Vector3(-1.8, 0.1, 4.0), 0.0)
+	await _ticks(game, 1)
+	_check(absf(angle_difference(deg_to_rad(sampler.yaw), PI)) < 0.1,
+		"and a fresh one turns it to the heading", "%.1f" % sampler.yaw)
+	runner.controller.sampler = null
 	_finished()
 
 

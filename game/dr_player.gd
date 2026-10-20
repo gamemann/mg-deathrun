@@ -340,7 +340,14 @@ func _go_through(state: DotFpsState, sent: Array) -> void:
 	# The controller's own teleport, not a hand-written copy of it: it also resets the previous-state
 	# blend the render interpolates from (and the position two back), so the local view does not sweep
 	# across the course for a frame.
+	# Not re-aiming the player's mouse on a REPLAY: a correction re-runs ticks the player has already
+	# turned away from, and the sampler is the live view, so the warp's heading would snap it back to
+	# where it pointed a few ticks ago. The simulated yaw is the command's on those ticks anyway.
+	var live_look := controller.sampler
+	if controller.is_replaying():
+		controller.sampler = null
 	controller.teleport(sent[0] as Vector3, float(sent[1]), 0.0)
+	controller.sampler = live_look
 	state.velocity = carried if bool(sent[2]) else Vector3.ZERO
 	state.ground_id = 0
 	warps += 1
