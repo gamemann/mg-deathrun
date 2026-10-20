@@ -312,10 +312,13 @@ func _after_tick(tick: int, state: DotFpsState) -> void:
 	# A teleport, last: after the carry and the wind, so a floor that carried someone onto a pad
 	# sends them from where they ended up. The same pure function of position on the server and
 	# on a predicting client, so neither has to be told.
-	var sent := stage.teleport_at(state.position, team == RUNNER_TEAM)
+	# Not for a runner who has finished (they walk the end arena freely): `at_end` is replicated, so a
+	# predicting client agrees with the server about it.
+	if not at_end:
+		var sent := stage.teleport_at(state.position, team == RUNNER_TEAM)
 
-	if not sent.is_empty():
-		_go_through(state, sent)
+		if not sent.is_empty():
+			_go_through(state, sent)
 
 	global_position = state.position
 
@@ -333,25 +336,15 @@ const RUNNER_TEAM := 1
 ## Here the client lands in the same tick as the server and reconciliation replays the same
 ## jump.
 func _go_through(state: DotFpsState, sent: Array) -> void:
-	var heading := float(sent[1])
-	state.position = sent[0] as Vector3
-
-	if not bool(sent[2]):
-		state.velocity = Vector3.ZERO
-
-	state.mode = DotFpsState.Mode.AIR
+	var carried := state.velocity
+	# The controller's own teleport, not a hand-written copy of it: it also resets the previous-state
+	# blend the render interpolates from (and the position two back), so the local view does not sweep
+	# across the course for a frame.
+	controller.teleport(sent[0] as Vector3, float(sent[1]), 0.0)
+	state.velocity = carried if bool(sent[2]) else Vector3.ZERO
 	state.ground_id = 0
-	state.time_since_grounded = 0.0
-	state.yaw = heading
-	state.pitch = 0.0
 	warps += 1
 	teleported = true
-
-	if sampler != null:
-		sampler.look_at_angles(heading, 0.0)
-
-	if controller.view != null:
-		controller.view.snap()
 
 
 func delta_for_tick() -> float:

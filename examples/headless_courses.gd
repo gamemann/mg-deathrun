@@ -43,7 +43,7 @@ func _ready() -> void:
 	_run.call_deferred()
 
 const PUSH_CHECKS := 4
-const TELEPORT_CHECKS := 10
+const TELEPORT_CHECKS := 17
 
 
 func _run() -> void:
@@ -154,6 +154,31 @@ func _test_teleport_pad(catalogue: DrCatalogue) -> void:
 	(looped["pieces"] as Array).append(loop_pad)
 	_check(not DrCourseDoc.validate(looped).ok, "a teleport that lands inside a teleport is refused")
 
+	# Destinations the validator refuses, each against a control that passes.
+	var base: Dictionary = (catalogue.courses[&"dr_practice"] as Dictionary).duplicate(true)
+	var solid_pad: Dictionary = made.value.duplicate(true)
+	solid_pad["to"] = Vector3(30.0, 0.1, 30.0)
+	var box: Dictionary = DrCourseDoc._piece({"kind": "box", "at": [20.0, 1.0, 20.0], "size": [4.0, 2.0, 4.0]}, 0).value
+	var ahead_volume: Dictionary = DrCourseDoc._piece({"kind": "teleport", "at": [0.0, 1.0, 4.0], "size": [1.0, 2.0, 1.0],
+		"to": [40.0, 0.1, 40.0], "heading": 0.0, "solid": false}, 0).value
+	var cases := {
+		"lands above a solid pad": [{"to": Vector3(0.0, 2.0, 0.0)}, []],
+		"lands inside solid geometry": [{"to": Vector3(20.0, 1.0, 20.0)}, [box]],
+		"lands below the kill height": [{"to": Vector3(30.0, -50.0, 30.0)}, []],
+		"keeps speed towards a volume": [{"to": Vector3(0.0, 0.1, 7.0), "keep": true, "heading": 0.0}, [ahead_volume]],
+	}
+	var control := base.duplicate(true)
+	(control["pieces"] as Array).append(solid_pad)
+	_check(DrCourseDoc.validate(control).ok, "a teleport to open floor passes the validator", str(DrCourseDoc.validate(control).error))
+
+	for label: String in cases:
+		var bad := base.duplicate(true)
+		var candidate := solid_pad.duplicate(true)
+		candidate.merge((cases[label] as Array)[0], true)
+		(bad["pieces"] as Array).append_array((cases[label] as Array)[1])
+		(bad["pieces"] as Array).append(candidate)
+		_check(not DrCourseDoc.validate(bad).ok, "the validator refuses a teleport that " + label)
+
 	# Trigger volumes, walked into: one that zeroes velocity, one that keeps it.
 	var stop: Dictionary = DrCourseDoc._piece({"kind": "teleport", "at": [-1.8, 1.0, 4.0], "size": [1.0, 2.0, 1.0],
 		"to": [1.5, 0.1, 6.5], "heading": 180.0, "solid": false}, 0).value
@@ -175,6 +200,15 @@ func _test_teleport_pad(catalogue: DrCatalogue) -> void:
 		"a runner who is in it is sent by their own tick, facing its heading", "%s yaw %.0f" % [there, runner.controller.state.yaw])
 	_check(Vector2(runner.controller.state.velocity.x, runner.controller.state.velocity.z).length() < 0.5,
 		"and lands still", str(runner.controller.state.velocity))
+	_check(runner.controller._previous_state.position.distance_to(there) < 0.01,
+		"and the render blend starts from the landing, not from where they were", str(runner.controller._previous_state.position))
+	# A runner who has finished walks the end arena freely: a volume does not send them.
+	runner.at_end = true
+	runner.place_at(Vector3(-1.8, 0.1, 4.0), 0.0)
+	await _ticks(game, 1)
+	_check(runner.controller.state.position.distance_to(Vector3(-1.8, 0.1, 4.0)) < 0.6 and not runner.teleported,
+		"a runner who has finished is not sent", str(runner.controller.state.position))
+	runner.at_end = false
 	runner.place_at(Vector3(1.8, 0.1, 4.0), 0.0)
 	runner.controller.state.velocity = Vector3(0.0, 0.0, -5.0)
 	await _ticks(game, 1)

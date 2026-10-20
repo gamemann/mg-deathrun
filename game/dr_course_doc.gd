@@ -154,6 +154,11 @@ static func validate(source: Dictionary) -> DotResult:
 			if str(other["kind"]) == "teleport" and pad_contains(other, pad["to"]):
 				return _refuse("a teleport lands inside a teleport (at %s)" % pad["to"], doc)
 
+		var why := _bad_destination(pad, normalised, float(doc["kill_height"]))
+
+		if why != "":
+			return _refuse(why, doc)
+
 	var traps: Variant = doc.get("traps", [])
 
 	if typeof(traps) != TYPE_ARRAY:
@@ -705,6 +710,51 @@ static func pad_contains(spec: Dictionary, feet: Vector3) -> bool:
 		return local.y >= size.y * 0.5 - 0.3 and local.y <= size.y * 0.5 + 1.0
 
 	return local.y >= -size.y * 0.5 - BODY_HEIGHT and local.y <= size.y * 0.5
+
+## Why a teleport's destination is a bad one, or "". Beyond a landing inside a teleport (checked by the
+## caller): above a solid pad (they fall back onto it, a loop), inside solid geometry or below the kill
+## height (dead on arrival), and, for `keep`, within [constant KEEP_REACH] metres of a volume along the
+## heading (the carried speed takes them into it).
+static func _bad_destination(pad: Dictionary, pieces: Array, kill_height: float) -> String:
+	var to: Vector3 = pad["to"]
+
+	if to.y < kill_height:
+		return "a teleport lands below the kill height (at %s)" % to
+
+	for other: Dictionary in pieces:
+		var kind := str(other["kind"])
+
+		if kind != "box" and not (kind == "teleport" and bool(other.get("solid", true))):
+			continue
+
+		var size: Vector3 = other["size"]
+		var local := Basis(Vector3.UP, deg_to_rad(float(other["yaw"]))).inverse() * (to - (other["at"] as Vector3))
+
+		if absf(local.x) >= size.x * 0.5 or absf(local.z) >= size.z * 0.5:
+			continue
+
+		if kind == "teleport" and local.y >= size.y * 0.5:
+			return "a teleport lands above a solid teleport pad, and falls back onto it (at %s)" % to
+
+		if local.y > -size.y * 0.5 and local.y < size.y * 0.5 - 0.05:
+			return "a teleport lands inside solid geometry (at %s)" % to
+
+	if bool(pad.get("keep", false)):
+		var ahead := Vector3(-sin(deg_to_rad(float(pad.get("heading", 0.0)))), 0.0, -cos(deg_to_rad(float(pad.get("heading", 0.0)))))
+
+		for other: Dictionary in pieces:
+			if str(other["kind"]) != "teleport" or bool(other.get("solid", true)):
+				continue
+
+			for step in range(0, int(KEEP_REACH / 0.5) + 1):
+				if pad_contains(other, to + ahead * (0.5 * step)):
+					return "a teleport that keeps speed lands within %.0f m of a teleport volume ahead (at %s)" % [KEEP_REACH, to]
+
+	return ""
+
+
+## How far ahead of a `keep` destination a volume may not be (metres): a player carrying speed.
+const KEEP_REACH := 8.0
 
 ## A player's half width and height, for a trigger volume (see [method pad_contains]).
 const BODY_RADIUS := 0.4
