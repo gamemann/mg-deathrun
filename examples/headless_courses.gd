@@ -54,6 +54,11 @@ func _run() -> void:
 	var _loaded := catalogue.load_from("courses")
 	var courses := catalogue.courses.keys()
 	courses.sort()
+	# DR_COURSES=id,id plays only those (a converted map is checked in minutes, not the whole catalogue)
+	var only := OS.get_environment("DR_COURSES")
+	if not only.is_empty():
+		var wanted := only.split(",")
+		courses = courses.filter(func(id: StringName) -> bool: return wanted.has(str(id)))
 
 	if courses.size() <= 1:
 		print("(no course directory: the built-in practice course only)")

@@ -1828,7 +1828,7 @@ func _bot_run(player: DrPlayer, command: DotFpsCommand) -> void:
 		if not grounded:
 			# In the air toward the landing: brake if the jump is going to carry past it.
 			_bot_land_on(player, command, point["at"])
-		elif toward.length() > float(point["reach"]) + 0.5:
+		elif toward.length() > float(point["reach"]) + 0.5 or at.y < (point["at"] as Vector3).y - 0.5:
 			var heading := toward.normalized()
 			var flat_speed := Vector2(player.controller.state.velocity.x, player.controller.state.velocity.z).length()
 			# How fast a jump from here has to be going to come down on the landing: the
@@ -1860,6 +1860,13 @@ func _bot_run(player: DrPlayer, command: DotFpsCommand) -> void:
 
 	# A landing is not reached until the bot is on its feet on it.
 	if bool(point["jump"]) and not grounded:
+		return
+
+	# Nor from the foot of the step it is on: reach is flat, and a landing 1.2 m back on top of
+	# a 0.94 m riser was ticked off by a bot standing against the riser, which then walked into
+	# the face toward the next point and waited a second for the unstick jump, on every step.
+	# (The take-off above is allowed that close for the same reason: still below the landing.)
+	if bool(point["jump"]) and at.y < (point["at"] as Vector3).y - 0.5:
 		return
 
 	if bool(point["jump"]) and index + 1 < route.size() and bool((route[index + 1] as Dictionary)["jump"]):
@@ -1894,7 +1901,15 @@ func _bot_land_on(player: DrPlayer, command: DotFpsCommand, target: Vector3) -> 
 	var state := player.controller.state
 	var flat := Vector3(state.velocity.x, 0.0, state.velocity.z)
 
-	if flat.length() < 0.3 or Vector2(target.x - state.position.x, target.z - state.position.z).length() > 7.0:
+	var to_target := Vector2(target.x - state.position.x, target.z - state.position.z)
+
+	if flat.length() < 0.3 or to_target.length() > 7.0:
+		return
+
+	# Not going at the target: a drift, not a jump that can carry past it, and braking along
+	# the drift zeroed the wish toward it. A standing jump up a 0.94 m riser drifted sideways
+	# at 0.4 m/s, had its forward push taken away every time, and bounced off the face forever.
+	if Vector2(flat.x, flat.z).normalized().dot(to_target.normalized()) < 0.5:
 		return
 
 	var g := config.gravity
