@@ -1,0 +1,22 @@
+These textures are from ambientCG (https://ambientcg.com), licensed CC0 1.0 (public domain, https://creativecommons.org/publicdomain/zero/1.0/). Author: Lennart Demes / ambientCG. Each 1K colour map is resized to 512 pixels and saved as JPEG.
+
+- concrete/floor.jpg: ambientCG Concrete034
+- concrete/wall.jpg: ambientCG Concrete031
+- brick/floor.jpg: ambientCG Concrete046
+- brick/wall.jpg: ambientCG Bricks097
+- wood/floor.jpg: ambientCG WoodFloor064
+- wood/wall.jpg: ambientCG Planks037A
+- snow/floor.jpg: ambientCG Snow010A
+- snow/wall.jpg: ambientCG Ice002
+- stone/floor.jpg: ambientCG Rock064
+- stone/wall.jpg: ambientCG Rock063
+- tiles/floor.jpg: ambientCG Tiles107
+- tiles/wall.jpg: ambientCG Tiles139
+- asphalt/floor.jpg: ambientCG Concrete036
+- asphalt/wall.jpg: ambientCG Concrete031
+- sand/floor.jpg: ambientCG Ground054
+- sand/wall.jpg: ambientCG Rock061
+- manor/floor.jpg: ambientCG WoodFloor040
+- manor/wall.jpg: ambientCG Wallpaper001A
+- town/floor.jpg: ambientCG Snow010A
+- town/wall.jpg: ambientCG Bricks105

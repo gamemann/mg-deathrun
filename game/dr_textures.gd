@@ -126,6 +126,20 @@ const LINE := 0.70
 ## Where a texture set is looked for. A missing directory is a supported state.
 static var TEXTURE_DIR := DrPaths.rebase("res://textures/prototype")
 
+## Where a course's surface skin is looked for: `<set>/floor.jpg` and `<set>/wall.jpg`, CC0 photographs
+## from ambientCG (textures/surfaces/LICENSE.txt). A skin is the theme's `surface` key and is the
+## only art a course can ask for: the game's pack carries the files, the course names one.
+static var SKIN_DIR := DrPaths.rebase("res://textures/surfaces")
+
+## The skin the course being built is drawn in; "" is the prototype grid. Set by [DrCourse] before it
+## builds and cleared after, because materials are cached per skin.
+static var skin := ""
+
+## One tile of a skin is four metres, with a one-metre checker composited on it (see
+## [constant SKIN_SQUARES]), so a skinned deck still counts jumps in squares.
+const SKIN_TILE_METRES := 4.0
+const SKIN_SQUARES := 4
+
 ## Built materials, by role. One per role for the whole map — a map is a few hundred
 ## boxes and a material each would be a few hundred shader compilations for one texture.
 static var _materials: Dictionary = {}
@@ -148,6 +162,12 @@ static var _grid: ImageTexture = null
 ## world is while the body moves under it: a turntable textured in world space looks like a
 ## disc that is not turning, which is the one fact about it a player has to read.
 static func surface(role: Role, moving: bool = false) -> StandardMaterial3D:
+	if skin != "" and not moving and role in [Role.DECK, Role.PILLAR, Role.SAFE, Role.ARENA]:
+		var skinned := _skin_surface(role)
+
+		if skinned != null:
+			return skinned
+
 	var key := int(role) * 2 + (1 if moving else 0)
 
 	if _materials.has(key):
@@ -201,13 +221,53 @@ static func tinted(role: Role, tint: Color, moving: bool = false) -> StandardMat
 	if tint.is_equal_approx(Color.WHITE):
 		return surface(role, moving)
 
-	var key := "%d:%d:%s" % [int(role), 1 if moving else 0, tint.to_html(false)]
+	var key := "%s:%d:%d:%s" % [skin, int(role), 1 if moving else 0, tint.to_html(false)]
 
 	if _materials.has(key):
 		return _materials[key]
 
 	var material := surface(role, moving).duplicate() as StandardMaterial3D
 	material.albedo_color = material.albedo_color * tint
+	_materials[key] = material
+	return material
+
+
+## The material a skin gives a still role: its floor photograph for ground, its wall one for the rest,
+## triplanar in world space like the grid. Null when the skin's file is not there, and the caller falls
+## back to the grid, so a misspelt skin is a plain course and not a broken one.
+static func _skin_surface(role: Role) -> StandardMaterial3D:
+	var kind := "wall" if role == Role.PILLAR else "floor"
+	var key := "skin:%s:%s" % [skin, kind]
+
+	if _materials.has(key):
+		return _materials[key]
+
+	var path := "%s/%s/%s.jpg" % [SKIN_DIR, skin, kind]
+	var texture: Texture2D = null
+
+	if _by_path.has(path):
+		texture = _by_path[path]
+	elif ResourceLoader.exists(path, "Texture2D"):
+		var loaded: Resource = ResourceLoader.load(path, "Texture2D")
+
+		if loaded is Texture2D:
+			var checkered := _with_checker(loaded as Texture2D, SKIN_SQUARES)
+			texture = checkered if checkered != null else loaded as Texture2D
+
+	_by_path[path] = texture
+
+	if texture == null:
+		_materials[key] = null
+		return null
+
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = texture
+	material.uv1_triplanar = true
+	material.uv1_world_triplanar = true
+	var scale := 1.0 / SKIN_TILE_METRES
+	material.uv1_scale = Vector3(scale, scale, scale)
+	material.roughness = 0.9
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_materials[key] = material
 	return material
 
@@ -249,7 +309,7 @@ static func installed(role: Role) -> Texture2D:
 ##
 ## Null when the pixels could not be read, which is not an error — the caller falls back
 ## to the tile as it came.
-static func _with_checker(source: Texture2D) -> ImageTexture:
+static func _with_checker(source: Texture2D, squares: int = INSTALLED_SQUARES_PER_TILE) -> ImageTexture:
 	var image := source.get_image()
 
 	if image == null or image.is_empty():
@@ -269,8 +329,8 @@ static func _with_checker(source: Texture2D) -> ImageTexture:
 	if width <= 0 or height <= 0:
 		return null
 
-	var square_w := maxi(width / INSTALLED_SQUARES_PER_TILE, 1)
-	var square_h := maxi(height / INSTALLED_SQUARES_PER_TILE, 1)
+	var square_w := maxi(width / squares, 1)
+	var square_h := maxi(height / squares, 1)
 
 	for y in range(height):
 		for x in range(width):

@@ -151,6 +151,9 @@ func build(p_doc: Dictionary) -> DotResult:
 		return checked
 
 	doc = checked.value
+	# The theme's surface skin is the materials' for the length of this build only: they are cached
+	# per skin, and nothing built later (a figure, the HUD) should be drawn in a course's photographs.
+	DrTextures.skin = str((doc["theme"] as Dictionary).get("surface", ""))
 
 	for index in range((doc["pieces"] as Array).size()):
 		_make_piece(index, doc["pieces"][index])
@@ -172,6 +175,7 @@ func build(p_doc: Dictionary) -> DotResult:
 		if use_bakes:
 			_attach_bake()
 
+	DrTextures.skin = ""
 	pose_at_time(0.0)
 	built.emit()
 

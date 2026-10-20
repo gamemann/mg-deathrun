@@ -517,7 +517,7 @@ static func _part(source: Variant, trap_id: String, index: int) -> DotResult:
 static func _theme(source: Variant) -> Dictionary:
 	var theme: Dictionary = source if typeof(source) == TYPE_DICTIONARY else {}
 
-	return {
+	var normal := {
 		"sky": _colour(theme.get("sky"), Color(0.48, 0.60, 0.74)),
 		"horizon": _colour(theme.get("horizon"), Color(0.80, 0.85, 0.90)),
 		"void": _colour(theme.get("void"), Color(0.10, 0.12, 0.16)),
@@ -525,6 +525,15 @@ static func _theme(source: Variant) -> Dictionary:
 		"deck": _colour(theme.get("deck"), Color.WHITE),
 		"fog": float(theme.get("fog", 0.004)),
 	}
+
+	# A surface skin (DrTextures), written only when the course names one: a document without it
+	# normalises exactly as before, so no baked course's fingerprint moves.
+	var skin := str(theme.get("surface", "")).strip_edges().to_lower()
+
+	if skin != "" and skin.is_valid_filename() and not skin.contains("."):
+		normal["surface"] = skin
+
+	return normal
 
 
 # --- The wire ---------------------------------------------------------------
