@@ -1,0 +1,17 @@
+# Which courses rotate (dot-map's DotMapRotationFile; the shape of the server's content.yml).
+# A course left out stays installed: the map menu (M) and an admin's change still load it.
+# It is only never drawn, never on the ballot and never nominated.
+# A server copies this to its --config directory and edits it; sv_map_rotation_file names it.
+defaults:
+  # A plain list is a rotation called "main".
+  maps: ["*"]
+  rotations:
+    # dr_rotation <name> switches at run time. "cycle" plays them in written order.
+    short:
+      mode: cycle
+      maps: [dr_foundry, "dr_ice*", dr_quarry]
+  # Command names are renameable too (dot-vote's roles and dr_courses / dr_reload); a leading
+  # "!" or "/" is dropped:
+  # commands:
+  #   names:
+  #     rtv: rockthevote

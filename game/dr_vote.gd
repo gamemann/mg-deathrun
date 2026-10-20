@@ -46,6 +46,13 @@ const COMMAND_NAMES := {"vote": "vote"}
 ## offer. The host's, because which courses a server plays is the world's to say.
 var courses_fn: Callable = Callable()
 
+## `() -> Dictionary`: maps.yml's `commands:` block. Unset renames nothing.
+var commands_spec_fn: Callable = Callable()
+
+## `(id) -> bool`: maps.yml's active rotation, handed to the source so the pack maps dot-vote merges
+## are filtered like the game's own (dot-vote API level 12). Unset, every merged map is offered.
+var in_rotation_fn: Callable = Callable()
+
 ## The Workshop's index and the `map_kind`s taken from it. Null and empty are the shared index
 ## and `provides.json`'s `accepts.map_kinds`; a suite sets both to a fixture.
 var content_index: DotContentIndex = null
@@ -103,6 +110,9 @@ func setup() -> DotResult:
 	source.follow_content(
 		content_index if content_index != null else DotContentIndex.shared(),
 		DrCatalogue.accepted_map_kinds() if accepted_kinds.is_empty() else accepted_kinds)
+	# By name, only where it exists: a delivered pack may run on an older shell dot-vote.
+	if "in_rotation_fn" in source:
+		source.set(&"in_rotation_fn", in_rotation_fn)
 
 	director = DotVoteDirector.new()
 	director.name = "VoteDirector"
@@ -310,7 +320,9 @@ func install_commands(host: Object) -> DotResult:
 
 	commands = DotVoteCommands.new()
 	commands.director = director
-	commands.names = COMMAND_NAMES
+	commands.names = COMMAND_NAMES.duplicate()
+	# maps.yml's `commands:` block, read on every bind, so an operator renames vote and rtv.
+	commands.spec_fn = commands_spec_fn
 	commands.voter_fn = func(ctx: Object) -> StringName:
 		var session: Variant = ctx.get("session")
 

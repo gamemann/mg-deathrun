@@ -150,9 +150,22 @@ func _game_load() -> DotResult:
 
 	add_command("dr_status", _cmd_status, "Show the round, the course and who is where")
 	add_command("dr_net", _cmd_net, "Show what the netcode is doing")
-	add_command("dr_courses", _cmd_courses, "List the courses, and any refused file")
+	# The game's own map commands are renameable from maps.yml's `commands:` block, like dot-vote's.
+	for name in world.command_names("dr_courses"):
+		add_command(name, _cmd_courses, "List the courses, and any refused file")
 	add_command("dr_traps", _cmd_traps, "List this course's traps, and which are spent")
-	add_command("dr_reload", _cmd_reload, "Read the course directory again (next round)")
+	for name in world.command_names("dr_reload"):
+		add_command(name, _cmd_reload, "Read the course directory again (next round)")
+	add_command("dr_rotation", _cmd_rotation,
+		"dr_rotation [name]: switch to a rotation in maps.yml, or list them", DotAdminFlags.CHANGEMAP)
+	add_command("dr_maps_reload", _cmd_maps_reload, "Re-read maps.yml", DotAdminFlags.CHANGEMAP)
+	var _file_cvar := add_cvar("sv_map_rotation_file", world.config.map_rotation_file,
+		"maps.yml: the courses that rotate, in named rotations. Unlisted courses stay installed.")
+	_file_cvar.changed.connect(func(_old: String, new_value: String) -> void:
+		world.config.map_rotation_file = new_value.strip_edges()
+		var _read := world.load_rotation()
+		if vote != null:
+			vote.refresh_courses())
 	# A player's choice of side, from chat as !activator / !runner / !any.
 	add_command("activator", _cmd_wish.bind(DrGame.ACTIVATORS), "Ask to be an activator in the next draw", "")
 	add_command("runner", _cmd_wish.bind(DrGame.RUNNERS), "Ask to run in the next draw", "")
@@ -576,12 +589,14 @@ func _build_vote(world: DrGame) -> void:
 
 	vote = DrVote.new()
 	vote.name = "CourseVote"
+	vote.commands_spec_fn = world.rotation_commands
+	vote.in_rotation_fn = func(id: StringName) -> bool: return world.catalogue.in_rotation(id)
 	vote.courses_fn = func() -> Array:
 		var out: Array = []
 
 		# The game's own courses only: the Workshop's come from the source's own follow, which
 		# reads the index on every ballot and so shows none of them online.
-		for id in world.catalogue.playable_courses(world.config.course_ids):
+		for id in world.catalogue.rotating(world.config.course_ids):
 			if not world.catalogue.is_workshop(id):
 				out.append([id, str((world.catalogue.courses.get(id, {}) as Dictionary).get("name", id))])
 
@@ -823,6 +838,47 @@ func _cmd_courses(ctx: DotCmdContext) -> void:
 	ctx.reply("playing: %s" % str(world.course_doc.get("id", "-")))
 
 
+func _cmd_rotation(ctx: DotCmdContext) -> void:
+	var world := game as DrGame
+
+	if world == null or world.catalogue == null or not world.catalogue.has_rotation_file():
+		ctx.reply("There is no maps.yml; every course rotates.")
+		return
+
+	var file := world.catalogue.rotation_file
+
+	if ctx.argc() == 0:
+		ctx.reply("Rotations: %s (active: %s)" % [", ".join(file.rotation_names()), file.active_name()])
+		return
+
+	var wanted := ctx.arg(0)
+	var switched := world.catalogue.switch_rotation(wanted)
+
+	if not switched.ok:
+		ctx.reply(switched.error.message)
+		return
+
+	if vote != null:
+		vote.refresh_courses()
+
+	ctx.reply("Rotation: %s" % wanted)
+
+
+func _cmd_maps_reload(ctx: DotCmdContext) -> void:
+	var world := game as DrGame
+
+	if world == null or world.catalogue == null:
+		ctx.reply("No world.")
+		return
+
+	var read := world.load_rotation()
+
+	if vote != null:
+		vote.refresh_courses()
+
+	ctx.reply("maps.yml read." if read.ok else read.error.message)
+
+
 func _cmd_traps(ctx: DotCmdContext) -> void:
 	var world := game as DrGame
 
@@ -854,6 +910,7 @@ func _cmd_reload(ctx: DotCmdContext) -> void:
 
 	var loaded := world.catalogue.load_from(world.config.course_directory)
 	loaded += await _add_delivered_courses(world)
+	world.catalogue.apply_rotation(world.config.course_ids)
 
 	if vote != null:
 		vote.refresh_courses()
