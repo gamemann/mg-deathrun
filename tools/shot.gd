@@ -35,6 +35,8 @@ var _fire := 0.0
 var _out := "res://screenshots/shot.png"
 var _trap := ""
 var _after := 0.5
+## `--eye=x,y,z`: where the trap view's camera stands, metres from the victim (the default assumes a corridor running along -Z, which a converted map's corridor does not)
+var _eye_offset := Vector3.INF
 ## `--spent`: `--view=button` presses the trap first, so the prompt says it is spent.
 var _spent := false
 var _client: Node = null
@@ -85,6 +87,10 @@ func _ready() -> void:
 			_out = arg.trim_prefix("--out=")
 		elif arg.begins_with("--trap="):
 			_trap = arg.trim_prefix("--trap=")
+		elif arg.begins_with("--eye="):
+			var parts := arg.trim_prefix("--eye=").split_floats(",")
+			if parts.size() == 3:
+				_eye_offset = Vector3(parts[0], parts[1], parts[2])
 		elif arg.begins_with("--after="):
 			_after = arg.trim_prefix("--after=").to_float()
 
@@ -186,6 +192,8 @@ func _run() -> void:
 			# Behind them and up, inside the corridor whichever side they are on: an offset to one
 			# side put the camera in the wall for a trap on the left half.
 			var eye := Vector3(clampf(-victim.x * 0.6, -2.4, 2.4), victim.y + 2.6, victim.z + 6.5)
+			if _eye_offset != Vector3.INF:
+				eye = victim + _eye_offset
 			_free_camera().look_at_from_position(eye, victim + Vector3(0.0, 0.9, 0.0))
 		"maps":
 			# M: the solo course list, with the Workshop's course among the game's own.

@@ -7,6 +7,7 @@
 #   tools/shot.sh --view=activator                     # the walkway, from the activator's eyes
 #   tools/shot.sh --view=button [--spent]              # the activator at a button: the key prompt
 #   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5      # a trap, mid-run, on somebody
+#   tools/shot.sh --view=trap --trap=t29 --eye=-7,2.5,-5  # ...from a camera 7 m behind, 2.5 up and 5 to the side of the victim (a corridor along +X)
 #   tools/shot.sh --view=third --seconds=8             # third person, on the course
 #   tools/shot.sh --view=cover                         # the loading cover, before it lifts
 #   tools/shot.sh --view=end                           # the end arena, from a runner who made it
@@ -38,7 +39,7 @@ for arg in "$@"; do
         --seconds=*) seconds="${arg#*=}" ;;
         --out=*)     out="${arg#*=}" ;;
         --dr-*)      config+=("$arg") ;;
-        --trap=*|--after=*|--end-wait=*|--fire=*|--board|--spent|--no-bake) config+=("$arg") ;;
+        --trap=*|--after=*|--eye=*|--end-wait=*|--fire=*|--board|--spent|--no-bake) config+=("$arg") ;;
         *)           echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
