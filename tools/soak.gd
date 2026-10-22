@@ -14,6 +14,7 @@ const DrPlayer := preload("../game/dr_player.gd")
 ## godot --headless --path . res://tools/soak.tscn -- --map dr_temple --bots 4 --minutes 2
 ## [/codeblock]
 ##
+## --probe 1 prints, once a second, each activator's place, target trap and distance to its button.
 ## Takes the harness's own flags too (--soak-max-stuck-sec and the rest of DotBotSoakConfig).
 ## Writes .godot/test-logs/soak-<course>.json, prints the SOAK line, exits 1 when the run fails.
 ## Rounds run back to back (no warm-up or intermission). A bot is only judged stuck while the
@@ -28,6 +29,7 @@ var _game: DrGame
 var _tick := 0
 var _traps := 0
 var _finishes := 0
+var _reached := 0
 
 
 func _ready() -> void:
@@ -109,6 +111,13 @@ func _run() -> void:
 	report["rounds"] = _game.round_number
 	report["traps_fired"] = _traps
 	report["finishes"] = _finishes
+	report["button_reaches"] = _reached
+	# A stand-in that never reaches a button is a dead game. One that reaches them and presses
+	# nothing is runners who never stop: they run at the activator's own speed from a start
+	# ahead of it, so it arrives as they leave (dr_internet, dr_parking_garage).
+	if _game.stage != null and _game.stage.trap_count() > 0 and _traps == 0 and _reached == 0 and cfg.minutes >= 0.5:
+		report["ok"] = false
+		(report["reasons"] as Array).append("the activator stand-in neither pressed nor reached a button in %d rounds" % _game.round_number)
 	print(DotBotSoak.summary(report))
 	print(DotBotSoak.report_line(report))
 	var path := ProjectSettings.globalize_path("res://.godot/test-logs/soak-%s.json" % map_id)
@@ -129,6 +138,42 @@ func _release_game() -> void:
 func _step(_delta: float) -> void:
 	_tick += 1
 	_game.simulate(1.0 / float(TICK_RATE))
+	if _tick % 8 == 0:
+		_count_reaches()
+	if _arg("probe", "") != "" and _tick % TICK_RATE == 0:
+		_probe()
+
+
+## Counts the checks (every eighth tick) at which an activator stood within reach of a button.
+func _count_reaches() -> void:
+	for id: StringName in _game.players:
+		if int(_game.sides.get(id, 0)) == DrGame.RUNNERS:
+			continue
+		var eyes: Vector3 = (_game.players[id] as DrPlayer).eye_position()
+		for i in range(_game.stage.trap_count()):
+			if eyes.distance_to(_game.stage.button_point(i)) <= _game.config.button_reach:
+				_reached += 1
+				break
+
+
+## --probe: once a second, where each activator is, the trap it heads for, and how far from that button.
+func _probe() -> void:
+	if _tick == TICK_RATE:
+		for i in range(_game.stage.trap_count()):
+			print("PROBE trap %d button=%s zone=%s" % [i, _game.stage.button_point(i), _game.stage.trap_zone(i)])
+		print("PROBE walkway=%s" % [_game.stage.walkway()])
+	for id: StringName in _game.players:
+		if int(_game.sides.get(id, 0)) == DrGame.RUNNERS:
+			print("PROBE runner at=%s fin=%s" % [_game.players[id].controller.state.position, _game.players[id].at_end])
+			continue
+		var body: DrPlayer = _game.players[id]
+		var target: int = _game._bot_target_trap(body)
+		var gap := -1.0
+		if target >= 0:
+			gap = body.eye_position().distance_to(_game.stage.button_point(target))
+		print("PROBE t=%d phase=%d at=%s target=%d gap=%.2f walk=%s use=%s fired=%d" % [
+			_tick, _game.phase, body.controller.state.position, target, gap,
+			_game._bot_walk.get(id, -9), body.wants_use, _traps])
 
 
 func _movers() -> Array:

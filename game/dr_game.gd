@@ -249,6 +249,8 @@ var _grace: Dictionary = {}
 var _bot_route: Dictionary = {}
 ## Stand-in activators: player id -> the walkway point they last reached (-1: still at the spawn).
 var _bot_walk: Dictionary = {}
+## Stand-in activators: player id -> [the trap they head for, the tick it was chosen].
+var _bot_goal: Dictionary = {}
 var _bot_hands: Dictionary = {}
 var _bot_watch: Dictionary = {}
 var _bot_stuck: Dictionary = {}
@@ -770,7 +772,7 @@ func remove_player(player_id: StringName) -> void:
 	sides.erase(player_id)
 	_last_activators.erase(player_id)
 
-	for table in [_bot_route, _bot_walk, _bot_hands, _bot_watch, _bot_stuck, _bot_settle, _credit, _grace]:
+	for table in [_bot_route, _bot_walk, _bot_goal, _bot_hands, _bot_watch, _bot_stuck, _bot_settle, _credit, _grace]:
 		(table as Dictionary).erase(player_id)
 
 	player.queue_free()
@@ -2043,7 +2045,7 @@ func _bot_unstick(player: DrPlayer, command: DotFpsCommand) -> void:
 ## one a person can walk straight along; every course in this repository's is, and the suite
 ## runs every one with a stand-in at the buttons.
 func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
-	var target := _bot_target_trap()
+	var target := _bot_target_trap(player)
 
 	if target < 0:
 		return
@@ -2103,6 +2105,8 @@ func bot_walk_toward(player: DrPlayer, index: int, command: DotFpsCommand) -> bo
 		var here: int = int(_bot_walk.get(player.player_id, -1))
 
 		if here != stop:
+			here = _walkway_shortcut(player, points, here, stop)
+			_bot_walk[player.player_id] = here
 			var next := here + (1 if here < stop else -1)
 			var point: Dictionary = points[next]
 			goal = point["at"]
@@ -2122,16 +2126,75 @@ func bot_walk_toward(player: DrPlayer, index: int, command: DotFpsCommand) -> bo
 	return true
 
 
-## The ready trap the nearest live runner is closest to reaching.
-func _bot_target_trap() -> int:
+## The walkway point to count as already reached: the one nearest [param stop] (by position in
+## the list) that is close, in the open, and no farther from [param stop] than [param here].
+## A tour that runs the whole course in one order revisits its own corridors, so without this
+## an activator spawned beside the stretch it needs walked the tour from the start and
+## arrived after every runner had passed.
+func _walkway_shortcut(player: DrPlayer, points: Array, here: int, stop: int) -> int:
+	var at := player.controller.state.position
+	var best := here
+	var best_left := absi(stop - here) if here >= 0 else 1 << 20
+
+	for i in range(points.size()):
+		var left := absi(stop - i)
+
+		if left >= best_left or i == here:
+			continue
+
+		var point: Vector3 = (points[i] as Dictionary)["at"]
+
+		if Vector2(point.x - at.x, point.z - at.z).length() > 8.0 or absf(point.y - at.y) > 1.0:
+			continue
+
+		# And the way on from there must be open too, or the activator is counted past a corner
+		# it still has to turn.
+		var onward: Vector3 = (points[clampi(i + signi(stop - i), 0, points.size() - 1)] as Dictionary)["at"]
+
+		if _walkway_clear(at, point) and _walkway_clear(at, onward):
+			best = i
+			best_left = left
+
+	if best == here:
+		return here
+
+	# Counted as reached, so the next goal is the point after it on the way to the stop.
+	return best
+
+
+## Whether nothing solid stands between two points of the walkway at waist height.
+func _walkway_clear(from: Vector3, to: Vector3) -> bool:
+	var world := get_world_3d()
+
+	if world == null:
+		return true
+
+	var query := PhysicsRayQueryParameters3D.create(from + Vector3(0.0, 0.7, 0.0), to + Vector3(0.0, 0.7, 0.0))
+	query.collision_mask = physics.layer_mask(&"world") if physics != null else 1
+	return world.direct_space_state.intersect_ray(query).is_empty()
+
+
+## The ready trap this activator can reach in time and a runner is closest to: the buttons it
+## would arrive at before the runner has passed (walking its walkway at run speed), else the one
+## it is likeliest to catch. Chosen by distance alone, an activator spawned far from the first
+## trap walked toward a button it could never reach while every runner went by. Re-chosen
+## twice a second, so it does not turn round on every step.
+func _bot_target_trap(player: DrPlayer = null) -> int:
+	if player != null:
+		var held: Array = _bot_goal.get(player.player_id, [])
+
+		if not held.is_empty() and _tick - int(held[1]) < tick_rate / 2 and stage.trap_ready(int(held[0]), _tick):
+			return int(held[0])
+
 	var best := -1
-	var best_distance := INF
+	var best_score := INF
 
 	for index in range(stage.trap_count()):
 		if not stage.trap_ready(index, _tick):
 			continue
 
 		var zone := stage.trap_zone(index)
+		var arrive := _bot_walk_distance(player, index) / maxf(config.run_speed, 0.1) if player != null else 0.0
 
 		for runner in players_on(RUNNERS):
 			if not runner.is_alive() or runner.watching or runner.at_end:
@@ -2150,12 +2213,46 @@ func _bot_target_trap() -> int:
 				continue
 
 			var distance := at.distance_to(zone.get_center())
+			# Seconds late, with a second's grace for the zone's width; ties go to the nearer zone.
+			var late := maxf(arrive - distance / maxf(config.run_speed, 0.1) - 1.0, 0.0)
+			var score := late * 100.0 + distance * 0.001
 
-			if distance < best_distance:
-				best_distance = distance
+			if score < best_score:
+				best_score = score
 				best = index
 
+	if player != null:
+		_bot_goal[player.player_id] = [best, _tick]
+
 	return best
+
+
+## How far [param player] has to walk to be at trap [param index]'s button: along the walkway
+## when the course has one, else in a straight line.
+func _bot_walk_distance(player: DrPlayer, index: int) -> float:
+	var at := player.controller.state.position
+	var button := stage.button_point(index)
+	var points := stage.walkway()
+	var stop := stage.walkway_stop(index) if not points.is_empty() else -1
+
+	if stop < 0:
+		return Vector2(button.x - at.x, button.z - at.z).length()
+
+	var here := _walkway_shortcut(player, points, int(_bot_walk.get(player.player_id, -1)), stop)
+
+	if here == stop:
+		return Vector2(button.x - at.x, button.z - at.z).length()
+
+	var step := 1 if here < stop else -1
+	var first: Vector3 = (points[here + step] as Dictionary)["at"]
+	var total := Vector2(first.x - at.x, first.z - at.z).length()
+
+	for i in range(here + step, stop, step):
+		var from: Vector3 = (points[i] as Dictionary)["at"]
+		var to: Vector3 = (points[i + step] as Dictionary)["at"]
+		total += Vector2(to.x - from.x, to.z - from.z).length()
+
+	return total
 
 
 func _bot_fight(player: DrPlayer, command: DotFpsCommand) -> void:
