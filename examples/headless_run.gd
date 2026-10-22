@@ -1,11 +1,13 @@
 extends Node
 
+const DrBindings := preload("../game/dr_bindings.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrCourse := preload("../game/dr_course.gd")
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrClient := preload("../game/dr_client.gd")
 const DrEvents := preload("../game/net/dr_events.gd")
+const DrNetCommand := preload("../game/net/dr_net_command.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrHud := preload("../game/dr_hud.gd")
 const DrPaths := preload("../game/dr_paths.gd")
@@ -23,9 +25,9 @@ const DrSettings := preload("../game/dr_settings.gd")
 ## Every number about the course here is the built-in practice course's
 ## ([method DrCatalogue.practice]), whose comment lists where each trap is.
 
-const SECTIONS := 30
+const SECTIONS := 31
 
-const CHECKS := 136
+const CHECKS := 149
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -77,6 +79,7 @@ func _run() -> void:
 	await _test_help_and_menu()
 	await _test_the_map_menu()
 	await _test_offline_trigger()
+	await _test_free_roam()
 	await _test_the_drawn_gun()
 
 	for world in _worlds.duplicate():
@@ -1151,6 +1154,65 @@ func _test_offline_trigger() -> void:
 	var pressed := game.weapon_command_for(me).is_pressed(DotWeaponCommand.BUTTON_ATTACK)
 	_check(me.sampler != null and pressed, "the world's weapon command has the trigger the client holds")
 	client.free()
+	_finished()
+
+
+func _test_free_roam() -> void:
+	_section("whoever is out may free-roam by default, unless an operator says otherwise")
+	_check(DrConfig.new().spectate_camera == 0, "the config lets anybody be watched, so a free camera is not ruled out")
+	var game := await _world()
+	var a := game.add_player(&"u1", "Ada")
+	var b := game.add_player(&"u2", "Bo")
+	var id := a.player_id
+	_check(game.spectate_rules.roaming_permitted() and game.spectate.manager.rules == game.spectate_rules,
+		"the game's rules allow roaming and are the manager's own")
+	a.watching = true
+	game.spectate.on_died(id, b.player_id, false, Vector3(0, 2, 0), 0.0, 0)
+	game.spectate.manager.set_mode(String(id), DotSpectatorView.Mode.CHASE)
+	_check(game.spectate.can_roam(id), "somebody who is out may roam")
+	_check(game.spectate.toggle_roam(id).ok and game.spectate.is_roaming(id), "the key enters the free camera")
+
+	# Offline the world samples the body itself and the client stamps that sample: a roamer's
+	# movement and buttons must be zeroed there too, or the keys that fly the camera also walk
+	# the dead body (a previous roaming client left this gap).
+	var client := DrClient.new()
+	client.game = game
+	client._adopt(a)
+	var command := DotFpsCommand.new()
+	command.move = Vector2(1.0, 1.0)
+	command.set_button(DrNetCommand.BUTTON_FIRE, true)
+	client._firing = true
+	client._stamp(command)
+	_check(command.move == Vector2.ZERO and command.buttons == 0,
+		"a roamer's movement command is zeroed, offline included")
+	client.free()
+
+	var cam := DotSpectatorFreeCam.new()
+	cam.rules = game.spectate_rules
+	cam.seed_from(Transform3D(Basis.IDENTITY, Vector3(0, 2, 0)))
+	var pose := cam.step(Vector3(0, 0, 1), false, false, 0.5)
+	_check(pose.origin.distance_to(Vector3(0, 2, 0)) > 0.5, "and flying moves it", str(pose.origin))
+	_check(game.spectate.manager.move_free(String(id), pose.origin, pose.basis).ok
+		and game.spectate.camera_for(id).origin.is_equal_approx(pose.origin), "the manager keeps where it is")
+	_check(game.spectate.toggle_roam(id).ok and not game.spectate.is_roaming(id), "the key again goes back to a player")
+
+	var _off := game.spectate_rules.set_cvar("mp_freeroam", "0")
+	var refused := game.spectate.toggle_roam(id)
+	_check(not refused.ok and refused.error.code == DotError.CODE_FORBIDDEN and not game.spectate.is_roaming(id),
+		"mp_freeroam 0 refuses it")
+	var _on := game.spectate_rules.set_cvar("mp_freeroam", "1")
+	var _own := game.spectate_rules.set_cvar("mp_forcecamera", "1")
+	_check(not game.spectate.toggle_roam(id).ok and not game.spectate.is_roaming(id), "mp_forcecamera 1 refuses it")
+
+	var restricted := await _world(func(c: DrConfig) -> void:
+		c.spectate_camera = 1)
+	_check(restricted.spectate_rules.force_camera == 1 and not restricted.spectate_rules.roaming_permitted(),
+		"a config that restricts the camera turns roaming off")
+	var keys := DrBindings.make()
+	_check(keys.defaults_on("G").size() == 1 and str(keys.row_for_action(DrBindings.ROAM).get("default", "")) == "G",
+		"the free camera is on G, and nothing else defaults to G")
+	_check(not DrEvents.write_ask_roam().is_empty() and int(DrEvents.Ask.values().max()) == DrEvents.Ask.ROAM,
+		"the request is the last of the asks and carries a byte")
 	_finished()
 
 

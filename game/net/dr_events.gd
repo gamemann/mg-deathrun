@@ -60,6 +60,8 @@ enum Ask {
 	SAY,
 	## I am out: show me the next person, the previous one, or the other camera.
 	SPECTATE,
+	## I am out: take me into the free camera, or back onto a player from it.
+	ROAM,
 }
 
 ## Every decoder returns an `ok` beside its fields, and every caller checks it.
@@ -422,6 +424,11 @@ static func write_ask_spectate(direction: int) -> PackedByteArray:
 static func read_ask_spectate(r: DotNetReader) -> Dictionary:
 	var raw := r.read_uint(2)
 	return {"direction": clampi(raw, 0, 2) - 1, "ok": r.ok()}
+
+
+## The free-roam key. No payload: the server knows which mode the sender is in.
+static func write_ask_roam() -> PackedByteArray:
+	return PackedByteArray([0])
 
 
 # --- The course ------------------------------------------------------------

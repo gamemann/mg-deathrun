@@ -34,6 +34,7 @@ There are three courses: a short practice run built into the game, and **Ice Wor
 | **Mouse 1** | Fire, at the end |
 | **Mouse 2** / **R** / **1**-**5** | Alt-fire / reload / weapon slots |
 | **F5** | First or third person |
+| **G** | Free camera while out (move keys fly, Sprint fast, Walk slow); `mp_freeroam 0` or `mp_forcecamera 1` refuses it |
 | **H** | Help: the rules and every key as you have it bound |
 | **Esc** | Menu: settings (every key above can be rebound), help, and leave |
 
