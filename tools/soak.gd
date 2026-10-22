@@ -182,9 +182,23 @@ func _movers() -> Array:
 	for id: StringName in _game.players:
 		var body: DrPlayer = _game.players[id]
 		out.append({"id": id, "position": body.controller.state.position, "kind": &"bot",
-			"has_goal": open and int(_game.sides.get(id, 0)) == DrGame.RUNNERS \
-				and not body.finished and not body.at_end and body.is_alive() and not body.watching})
+			"has_goal": open and not body.finished and not body.at_end and body.is_alive() \
+				and not body.watching and _heading_somewhere(id, body)})
 	return out
+
+
+## A runner always has the course to run. An activator is only judged while it walks to a button:
+## once it stands at one (or no runner is left to trap) waiting is its job. A wedged walk still fails.
+func _heading_somewhere(id: StringName, body: DrPlayer) -> bool:
+	if int(_game.sides.get(id, 0)) == DrGame.RUNNERS:
+		return true
+	if _game.stage == null:
+		return false
+	var eyes := body.eye_position()
+	for i in range(_game.stage.trap_count()):
+		if eyes.distance_to(_game.stage.button_point(i)) <= _game.config.button_reach:
+			return false
+	return _game._bot_target_trap(body) >= 0
 
 
 func _fail(why: String) -> void:
