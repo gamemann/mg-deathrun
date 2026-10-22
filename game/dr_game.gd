@@ -1055,7 +1055,9 @@ func load_rotation() -> DotResult:
 	var paths := PackedStringArray()
 
 	if found != "":
-		paths.append(found)
+		# Every layer of the new layout merges (shipped, then operator); a named file or the legacy file stands alone.
+		var layers := DotMapRotationFile.find_layers(dir)
+		paths = layers if layers.has(found) else PackedStringArray([found])
 
 	var read := DotMapRotationFile.load_files(paths, "mg-deathrun")
 

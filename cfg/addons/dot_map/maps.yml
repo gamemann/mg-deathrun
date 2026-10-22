@@ -1,7 +1,7 @@
 # Which courses rotate (dot-map's DotMapRotationFile; the shape of the server's content.yml).
 # A course left out stays installed: the map menu (M) and an admin's change still load it.
 # It is only never drawn, never on the ballot and never nominated.
-# A server copies this to its --config directory and edits it; sv_map_rotation_file names it.
+# A server copies this to its --config directory (or cfg/server/dot_map/) and edits it; sv_map_rotation_file names another file.
 defaults:
   # A plain list is a rotation called "main".
   maps: ["*"]
