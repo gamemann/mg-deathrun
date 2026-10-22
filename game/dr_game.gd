@@ -2087,6 +2087,9 @@ func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
 
 
 ## The preset the bots' numbers are taken relative to, so medium plays as before presets.
+## Fewest walkway points a round's first step may skip, counting from the spawn (point -1).
+const WALKWAY_SKIP_MIN := 8
+
 static var _MEDIUM_BOT: DotBotProfile = DotBotProfile.new()
 
 
@@ -2105,8 +2108,9 @@ func bot_walk_toward(player: DrPlayer, index: int, command: DotFpsCommand) -> bo
 		var here: int = int(_bot_walk.get(player.player_id, -1))
 
 		if here != stop:
-			here = _walkway_shortcut(player, points, here, stop)
-			_bot_walk[player.player_id] = here
+			if here < 0:
+				here = _walkway_shortcut(player, points, here, stop)
+				_bot_walk[player.player_id] = here
 			var next := here + (1 if here < stop else -1)
 			var point: Dictionary = points[next]
 			goal = point["at"]
@@ -2126,20 +2130,21 @@ func bot_walk_toward(player: DrPlayer, index: int, command: DotFpsCommand) -> bo
 	return true
 
 
-## The walkway point to count as already reached: the one nearest [param stop] (by position in
-## the list) that is close, in the open, and no farther from [param stop] than [param here].
+## The walkway point to count as already reached at the start of a round: the one nearest
+## [param stop] (by position in the list) that is close and in the open.
 ## A tour that runs the whole course in one order revisits its own corridors, so without this
 ## an activator spawned beside the stretch it needs walked the tour from the start and
 ## arrived after every runner had passed.
 func _walkway_shortcut(player: DrPlayer, points: Array, here: int, stop: int) -> int:
 	var at := player.controller.state.position
 	var best := here
-	var best_left := absi(stop - here) if here >= 0 else 1 << 20
+	var best_left := absi(stop - here)
 
 	for i in range(points.size()):
 		var left := absi(stop - i)
 
-		if left >= best_left or i == here:
+		# Forward only: a walk back along the tour meets drops and corners the rays do not.
+		if left >= best_left or i == here or i > stop:
 			continue
 
 		var point: Vector3 = (points[i] as Dictionary)["at"]
@@ -2151,15 +2156,27 @@ func _walkway_shortcut(player: DrPlayer, points: Array, here: int, stop: int) ->
 		# it still has to turn.
 		var onward: Vector3 = (points[clampi(i + signi(stop - i), 0, points.size() - 1)] as Dictionary)["at"]
 
-		if _walkway_clear(at, point) and _walkway_clear(at, onward):
+		if _walkway_clear(at, point) and _walkway_clear(at, onward) and _walkway_floored(at, onward):
 			best = i
 			best_left = left
 
-	if best == here:
+	# Only a long skip is worth the risk of a corner the ray cannot see; a few points are walked.
+	if best_left > absi(stop - here) - WALKWAY_SKIP_MIN:
 		return here
 
-	# Counted as reached, so the next goal is the point after it on the way to the stop.
 	return best
+
+
+## Whether there is floor under the whole of the straight line between two points.
+func _walkway_floored(from: Vector3, to: Vector3) -> bool:
+	for step in range(1, 9):
+		var sample := from.lerp(to, float(step) / 8.0)
+		sample.y = lerpf(from.y, to.y, float(step) / 8.0)
+
+		if not _floor_at(sample):
+			return false
+
+	return true
 
 
 ## Whether nothing solid stands between two points of the walkway at waist height.
@@ -2238,7 +2255,10 @@ func _bot_walk_distance(player: DrPlayer, index: int) -> float:
 	if stop < 0:
 		return Vector2(button.x - at.x, button.z - at.z).length()
 
-	var here := _walkway_shortcut(player, points, int(_bot_walk.get(player.player_id, -1)), stop)
+	var here: int = int(_bot_walk.get(player.player_id, -1))
+
+	if here < 0:
+		here = _walkway_shortcut(player, points, here, stop)
 
 	if here == stop:
 		return Vector2(button.x - at.x, button.z - at.z).length()
