@@ -16,7 +16,7 @@ const DrNetLink := preload("../game/net/dr_net_link.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 12
-const CHECKS := 86
+const CHECKS := 87
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -752,7 +752,7 @@ class CommandHost extends Node:
 		return null
 
 
-## `cfg/maps.yml`: which courses rotate. The format is dot-map's selftest's; this is what the GAME
+## `maps.yml` (dot_map tiers): which courses rotate. The format is dot-map's selftest's; this is what the GAME
 ## does with it: a course left out is installed and loadable and is never drawn, never on a
 ## ballot, never nominated, marked in the map list; a switch of rotation takes effect; a renamed
 ## command is registered; no file means every course.
@@ -782,6 +782,8 @@ func _test_rotation_file() -> void:
 		"commands": {"names": {"rtv": "rockit", "dr_courses": "courselist"}},
 	}}], "mg-deathrun")
 	_check(parsed.ok, "a rotation file parses", str(parsed.error))
+	var shipped := DotMapRotationFile.find_layers("", "mg-deathrun")
+	_check(not shipped.is_empty() and str(shipped[0]).ends_with("cfg/game/mg-deathrun/dot_map/maps.yml"), "the shipped maps.yml is the game tier file", str(shipped))
 	var kept = catalogue.rotation_file
 	catalogue.rotation_file = parsed.value
 	catalogue.apply_rotation(game.config.course_ids)
