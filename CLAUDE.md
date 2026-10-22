@@ -29,7 +29,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `game/dr_client.gd`, `dr_hud.gd`, `dr_audio.gd`, `dr_figure.gd`, `dr_settings.gd`, … | the client: poses the course per frame; its platform wiring (loading cover, settings, console, Tab, M, pointer, input block) is dot-game's `DotGameClient` (`platform`) |
 | `courses/` | link to `../mg-deathrun-maps/courses` |
 | `examples/` | `headless_run`, `headless_workshop`, `headless_courses`, `headless_net`, `dedicated` |
-| `tools/` | `shot.sh` (render a view), `trace_run` (where a stand-in runner goes), `audio_probe` |
+| `tools/` | `soak.tscn` (`./game.sh soak`, [docs/soak.md](docs/soak.md)), `shot.sh` (render a view), `trace_run` (where a stand-in runner goes), `audio_probe` |
 
 ## Running and testing
 
