@@ -604,6 +604,7 @@ func _build_settings() -> void:
 	# Not handed over: DrHud is a CanvasLayer and the platform's hud is a Control, so it follows
 	# the menu's theme itself, below.
 	platform.chat = chat
+	platform.look_position_fn = _look_position
 	platform.board_snapshot_fn = board_snapshot
 	# M: the course list. Solo a choice changes the course here at once; connected the server
 	# decides, by the owner's `sv_map_menu_flag`, and anybody without it gets a vote instead
@@ -1861,3 +1862,13 @@ static func new_chat() -> DotGameChatClient:
 func _toy_sound(id: StringName, at: Vector3, strength: float) -> void:
 	if audio != null:
 		var _played := audio.on_toy(id, at, strength)
+
+
+## Where a roster row's player stands, for dot-game's look-to-gag key (G, K).
+func _look_position(row: Dictionary) -> Variant:
+	if game == null:
+		return null
+	for who: DrPlayer in game.players.values():
+		if who != player and who.display_name == row["name"]:
+			return who.global_position + Vector3.UP * 1.5
+	return null
