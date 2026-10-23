@@ -7,6 +7,7 @@ const DrGame := preload("dr_game.gd")
 const DrPlayer := preload("dr_player.gd")
 const DrAvatars := preload("dr_avatars.gd")
 const DrVote := preload("dr_vote.gd")
+const DrMapConfig := preload("dr_map_config.gd")
 
 ## This game, as a module a dedicated server loads.
 ##
@@ -71,6 +72,14 @@ const COURSE_BALLOT_TOPIC := &"map_ballot"
 
 func _module_name() -> String:
 	return "deathrun"
+
+
+func _map_config_keys() -> Dictionary:
+	return DrMapConfig.KEYS
+
+
+func _map_config_game() -> String:
+	return DrMapConfig.GAME
 
 
 func _game_service() -> StringName:

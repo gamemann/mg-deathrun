@@ -1,0 +1,5 @@
+# Per-course rules for dr_horror (dot-map's docs/map-config.md). Every value is commented: the course plays under the game's own rules until one is uncommented.
+# Keys: dr_round_seconds, dr_countdown_seconds, dr_players_per_activator, dr_max_activators, dr_activator_health, dr_gravity, dr_autobhop.
+# dr_round_seconds: 300
+# dr_gravity: 20.0
+# dr_autobhop: true

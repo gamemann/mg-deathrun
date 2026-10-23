@@ -10,6 +10,7 @@ const DrNetBridge := preload("net/dr_net_bridge.gd")
 const DrNetCommand := preload("net/dr_net_command.gd")
 
 const DrConfig := preload("dr_config.gd")
+const DrMapConfig := preload("dr_map_config.gd")
 const DrGame := preload("dr_game.gd")
 const DrHud := preload("dr_hud.gd")
 const DrPaths := preload("dr_paths.gd")
@@ -504,8 +505,27 @@ func is_activator() -> bool:
 	return player != null and game != null and game.team_of(player.player_id) == DrGame.ACTIVATORS
 
 
+## The course's file sets the client-side rules it predicts with (gravity, auto-hop); the last course's come back.
+func _apply_map_config(stage_id: StringName) -> void:
+	if platform == null or game == null:
+		return
+	if platform.map_config_keys.is_empty():
+		platform.map_config_keys = DrMapConfig.client_keys()
+		platform.map_config_game = DrMapConfig.GAME
+		platform.map_config_get_fn = func(key: String) -> Variant:
+			return str(game.config.gravity) if key == "dr_gravity" else ("1" if game.config.auto_bunny_hop else "0")
+		platform.map_config_set_fn = func(key: String, value: Variant) -> bool:
+			if key == "dr_gravity":
+				game.config.gravity = float(str(value))
+			else:
+				game.config.auto_bunny_hop = str(value) in ["1", "true"]
+			return true
+	platform.map_changed(String(stage_id))
+
+
 ## A new course. The name, once, big.
 func _on_stage(stage_id: StringName) -> void:
+	_apply_map_config(stage_id)
 	# The new course's toys are heard: a ball's bounce off a crusher.
 	if game.stage != null and game.stage.toys != null and not game.stage.toys.sound.is_connected(_toy_sound):
 		var _c := game.stage.toys.sound.connect(_toy_sound)
