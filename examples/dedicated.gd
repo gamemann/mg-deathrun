@@ -411,6 +411,10 @@ func _test_the_course_vote() -> void:
 	_check(director.current_id() == voted and not director.is_voting(),
 		"the new course starts the vote over", str(director.current_id()))
 	vote.set("voters_fn", func() -> Array: return [&"console"])
+	director.rules.rtv_delay_sec = 0.0
+	director.rules.min_players_to_vote = 1
+	director.rules.rtv_min_players = 1
+	director.rules.allow_single_voter_auto = true
 	director.advance(director.rules.vote_cooldown_sec + 0.1)
 	var ballots: Array = []
 	director.vote_opened.connect(func(_options: Array, _seconds: float) -> void: ballots.append(1))
