@@ -12,6 +12,7 @@ extends Node
 ##   tools/shot.sh --view=third                     # third person, mid-course
 ##   tools/shot.sh --view=cover                     # the loading cover, before it lifts
 ##   tools/shot.sh --view=end                       # the end arena, from a runner who made it
+##   tools/shot.sh --view=killcam --seconds=2       # the round's last moment replayed; --seconds=7.5 for the podium
 ##
 ## Any `--dr-*` is the game's own configuration (see `DrConfig`), because `DrClient` reads it.
 
@@ -209,6 +210,13 @@ func _run() -> void:
 					if str(rows[i]["id"]) == "fixture_pit":
 						picker.call(&"turn", 99)
 						picker.call(&"turn", i - rows.size() + 1)
+			await _seconds_of(_seconds)
+		"killcam", "reveal":
+			# A runner caught by a trap and the round decided; --seconds is how long after, so
+			# ~2 is the replay and ~7.5 the podium.
+			await _seconds_of(game.config.countdown_seconds + 3.0)
+			game._kill(local, 0, DrGame.DIED_TRAP)
+			game._decide(DrGame.ACTIVATORS, "the activators win")
 			await _seconds_of(_seconds)
 		"end":
 			await _seconds_of(game.config.countdown_seconds + 0.5)

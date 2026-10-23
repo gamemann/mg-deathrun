@@ -11,6 +11,7 @@
 #   tools/shot.sh --view=third --seconds=8             # third person, on the course
 #   tools/shot.sh --view=cover                         # the loading cover, before it lifts
 #   tools/shot.sh --view=end                           # the end arena, from a runner who made it
+#   tools/shot.sh --view=killcam --seconds=2           # the round's last moment replayed (--seconds=7.5: the podium)
 #   tools/shot.sh --view=end --end-wait=5              # ...once the weapon they were handed is out
 #   tools/shot.sh --view=end --end-wait=3 --fire=0.4   # ...firing: flash, tracer, impact, the counter down
 #   tools/shot.sh --view=third --no-bake               # without the baked light, to compare

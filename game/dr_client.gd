@@ -14,6 +14,7 @@ const DrGame := preload("dr_game.gd")
 const DrHud := preload("dr_hud.gd")
 const DrPaths := preload("dr_paths.gd")
 const DrPlayer := preload("dr_player.gd")
+const DrKillcam := preload("dr_killcam.gd")
 
 ## One local player, a camera and a HUD over an [DrGame] — offline, or against a server.
 ##
@@ -100,6 +101,16 @@ var view_model: ZeeViewModel = null
 var net: DotNetManager = null
 var bridge: DrNetBridge = null
 var link: Node = null
+## Records every frame and replays the round's last moment ([DrKillcam]); then the reveal.
+var killcam: DrKillcam = null
+var winner_reveal: DotWinnerReveal = null
+## The server's `mp_killcam_time`; -1 until it has said, so the config's number stands.
+var _killcam_sec: float = -1.0
+var _round_ending: bool = false
+var _round_end_number: int = 0
+var _round_end_why: String = ""
+var _round_board_open: bool = false
+var _hud_was_visible: bool = true
 
 var _offline: bool = true
 var _sampler: DotFpsSampler = null
@@ -193,6 +204,7 @@ func _ready() -> void:
 	_build_chat()
 	_build_audio()
 	_build_settings()
+	_build_killcam()
 
 	if _offline:
 		_start_offline()
@@ -327,6 +339,10 @@ func _build_netcode() -> DotResult:
 		# predicts its own player.
 		var _view := game.view_rules.follow_cvars(link)
 		var _solid := game.body_rules.follow_cvars(link)
+		if link.has_method(&"replicated_cvar"):
+			_on_killcam_cvar("mp_killcam_time", String(link.call(&"replicated_cvar", "mp_killcam_time", "")))
+			if link.has_signal(&"replicated_cvar_changed"):
+				link.connect(&"replicated_cvar_changed", _on_killcam_cvar)
 		# And mp_forcecamera / mp_freeroam*: this end flies the spectator's free camera.
 		var _spectate := game.spectate_rules.follow_cvars(link)
 
@@ -518,6 +534,9 @@ func _on_stage(stage_id: StringName) -> void:
 ## A runner reached the end. What the feed and the speakers say.
 func _on_finished(session_id: int, place: int, seconds: float) -> void:
 	var who: DrPlayer = game.players.get(DrNetBridge.player_key(session_id))
+
+	if killcam != null:
+		killcam.note_moment(DrNetBridge.player_key(session_id), "reached the end #%d" % place)
 	var mine := session_id == _watch_id
 
 	if audio != null:
@@ -550,23 +569,142 @@ func _on_trap(index: int, _tick: int, by: int) -> void:
 		hud.shout(game.stage.trap_name(index), 1.0)
 
 
+# --- The end of a round: killcam, winner reveal, board -------------------------
+
+## The round's last moment, a death or a finish. A shot puts the victim in the shooter's eyes,
+## anything else (a trap, the pit, a fall) in the victim's own.
+func _note_death(victim: StringName, by: StringName, why: StringName) -> void:
+	if killcam == null:
+		return
+	var who: DrPlayer = game.players.get(victim)
+	var name_of := who.display_name if who != null else String(victim)
+	if by != &"" and game.players.has(by) and by != victim:
+		killcam.note_moment(by, "put down", name_of)
+		return
+	var what := "caught by a trap"
+	match why:
+		DrGame.DIED_PIT:
+			what = "went in the pit"
+		DrGame.DIED_FELL:
+			what = "fell"
+		DrGame.DIED_SHOT:
+			what = "put down at the end"
+	killcam.note_moment(victim, what)
+
+
+func _build_killcam() -> void:
+	killcam = DrKillcam.new()
+	killcam.name = "RoundKillcam"
+	killcam.players_fn = func() -> Array: return game.players.values() if game != null else []
+	killcam.player_for_fn = func(key: StringName) -> Variant: return game.players.get(key) if game != null else null
+	killcam.feet_fn = func(p: DrPlayer) -> Vector3: return drawn_position(p, _is_remote(p))
+	killcam.colour_fn = func(p: DrPlayer) -> Color: return game.side_colour(game.team_of(p.player_id))
+	killcam.seconds_fn = func() -> float: return _killcam_sec if _killcam_sec >= 0.0 else game.config.killcam_seconds
+	killcam.hide_while_playing = [hud, chat]
+	killcam.over.connect(func(_skipped: bool) -> void: _reveal_round())
+	add_child(killcam)
+	winner_reveal = DotWinnerReveal.new()
+	winner_reveal.name = "WinnerReveal"
+	winner_reveal.skip_actions = DrKillcam.SKIP_ACTIONS
+	winner_reveal.hold_seconds = 4.0
+	winner_reveal.finished.connect(_on_reveal_finished)
+	add_child(winner_reveal)
+
+
+## True for a player some other process simulates (the interpolator places them).
+func _is_remote(p: DrPlayer) -> bool:
+	return net != null and net.is_running() and p != player
+
+
+## `mp_killcam_time`, from the server's replicated cvar.
+func _on_killcam_cvar(cvar_name: String, value: String) -> void:
+	if cvar_name == "mp_killcam_time" and value.strip_edges().is_valid_float():
+		_killcam_sec = clampf(value.to_float(), 0.0, 30.0)
+
+
+func _begin_round_end(number: int, why: String) -> void:
+	_round_end_number = number
+	_round_end_why = why
+	_round_ending = true
+	if killcam == null or not killcam.round_ended():
+		return
+	DotLog.debug(CHANNEL, "the winner waits for the killcam")
+
+
+## The top three on a podium, after the killcam and before the board.
+func _reveal_round() -> void:
+	if not _round_ending:
+		return
+	var rows: Array = []
+	for key: StringName in game.players:
+		rows.append(game.players[key])
+	rows.sort_custom(func(a: DrPlayer, b: DrPlayer) -> bool: return a.points > b.points)
+	var entries: Array = []
+	for who: DrPlayer in rows.slice(0, 3):
+		entries.append({"name": who.display_name, "score": "%d %s" % [who.points, "point" if who.points == 1 else "points"],
+			"colour": game.side_colour(game.team_of(who.player_id))})
+	winner_reveal.reduced_motion = settings != null and settings.settings != null and settings.settings.get_bool(&"reduce_motion", false)
+	var shown := winner_reveal.present(entries, {"title": "ROUND %d" % _round_end_number,
+		"subtitle": _round_end_why.substr(0, 1).to_upper() + _round_end_why.substr(1) if _round_end_why != "" else "Round over", "hint": "Jump to skip"})
+	if not shown.ok:
+		_open_round_board()
+		return
+	if hud != null:
+		_hud_was_visible = hud.visible
+		hud.visible = false
+
+
+func _on_reveal_finished(_skipped: bool) -> void:
+	if hud != null and not killcam.is_playing():
+		hud.visible = _hud_was_visible
+	if _round_ending:
+		_open_round_board()
+
+
+func _open_round_board() -> void:
+	if board != null and not board.is_open():
+		board.open()
+		_round_board_open = true
+
+
+## A new round: whatever is still up goes, so it never covers the start.
+func _end_round_presentation() -> void:
+	_round_ending = false
+	if killcam != null:
+		killcam.skip()
+	if winner_reveal != null:
+		winner_reveal.skip()
+	if _round_board_open and board != null:
+		board.close()
+	_round_board_open = false
+
+
+func _killcam_frame() -> void:
+	if killcam != null and game != null:
+		killcam.frame()
+
+
 func _on_round(number: int, began: bool, _winner: int, why: String = "") -> void:
 	if audio != null:
 		var _heard := audio.on_round(began)
 
 	if began:
 		hud.shout("ROUND %d" % number, 2.4)
+		_end_round_presentation()
 		return
 
 	hud.shout(why if why != "" else "round over", 4.0)
+	_begin_round_end(number, why)
 
 	if chat != null and why != "":
 		chat.say_locally(why, Color(0.98, 0.86, 0.40))
 
 
-func _on_death(session_id: int, _by: int, why: StringName) -> void:
+func _on_death(session_id: int, by: int, why: StringName) -> void:
 	var id := DrNetBridge.player_key(session_id)
 	var who: DrPlayer = game.players.get(id)
+
+	_note_death(id, DrNetBridge.player_key(by) if by > 0 else &"", why)
 
 	_hear_death(who, why)
 
@@ -670,9 +808,12 @@ func _hear_the_world() -> void:
 		_on_round(n, true, 0))
 	game.round_over.connect(func(n: int, winner: int, why: String) -> void:
 		_on_round(n, false, winner, why))
-	game.player_died.connect(func(id: StringName, _by: StringName, why: StringName) -> void:
+	game.player_died.connect(func(id: StringName, by: StringName, why: StringName) -> void:
+		_note_death(id, by, why)
 		_hear_death(game.players.get(id), why))
 	game.player_finished.connect(func(id: StringName, place: int, seconds: float) -> void:
+		if killcam != null:
+			killcam.note_moment(id, "reached the end #%d" % place)
 		_on_finished(DrNetBridge.session_of(id) if id != &"local" else _watch_id, place, seconds))
 	game.trap_fired.connect(func(index: int, tick: int, by: StringName) -> void:
 		_on_trap(index, tick, DrNetBridge.session_of(by) if by != &"local" else _watch_id))
@@ -1324,6 +1465,7 @@ func _process(delta: float) -> void:
 	)
 
 	_present_course(delta)
+	_killcam_frame()
 
 	if camera == null or player == null:
 		return
