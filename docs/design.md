@@ -20,7 +20,7 @@ The first runner across the finish is teleported into the end arena with a weapo
 
 ## Credit
 
-A trapdoor kills nobody; the spikes under it do. `_watch_course` remembers the last running trap whose zone each runner was in (`_credit`), and a fall or a pit within `CREDIT_SECONDS` (4) is that trap's, credited to whoever pressed it (`pressed_by`) as dot-combat damage with them as attacker, so the kill feed, dot-match and `DrProgress.TRAP_KILLS` agree.
+A trapdoor kills nobody; the spikes under it do. `_watch_course` remembers the last running trap whose zone each runner was in (`_credit`), and a fall or a pit within `credit_seconds` (4) is that trap's, credited to whoever pressed it (`pressed_by`) as dot-combat damage with them as attacker, so the kill feed, dot-match and `DrProgress.TRAP_KILLS` agree.
 
 ## Points and the Tab board
 

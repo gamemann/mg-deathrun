@@ -16,7 +16,7 @@ const DrNetLink := preload("../game/net/dr_net_link.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 12
-const CHECKS := 87
+const CHECKS := 95
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -180,6 +180,7 @@ func _test_the_module_loads() -> void:
 	game = DrGame.new()
 	game.name = "World"
 	game.config = config
+	game.config_binder = DotGameConfigBinder.create(config, "mg-deathrun", "dr")
 	game.tick_rate = Engine.physics_ticks_per_second
 	add_child(game)
 	await get_tree().process_frame
@@ -199,6 +200,7 @@ func _test_the_module_loads() -> void:
 	_check(net != null and net.config.tick_rate == TICK_RATE, "the netcode runs at the configured rate")
 	_check(net != null and absf(net.config.world_extent - DrGame.NET_WORLD_EXTENT) < 0.01,
 		"against the world extent both ends decode with")
+	_noblock_and_config(module)
 	_finished()
 
 
@@ -877,6 +879,33 @@ func _test_rotation_file() -> void:
 	if vote != null:
 		vote.call("refresh_courses")
 	_finished()
+
+
+## Config cvars, the workbench's sync into a hand-written cvar, and dot-team's block rules through dot-game's DotGameNoblock.
+func _noblock_and_config(module: DotModule) -> void:
+	var teamblock := server.console.find_cvar("mp_teamblock")
+	var enemyblock := server.console.find_cvar("mp_enemyblock")
+	_check(teamblock != null and teamblock.get_string() == "0" and enemyblock != null and enemyblock.get_string() == "1",
+		"mp_teamblock is 0 and mp_enemyblock is 1 by default")
+	_check(server.console.has_name("dr_credit_seconds") and server.console.has_name("dr_friendly_fire") and server.console.has_name("dr_death_cam_seconds"),
+		"config fields with no hand-written cvar are dr_ cvars")
+	_check(not server.console.has_name("dr_bot_fumble_chance"), "a field with a hand-written cvar gets no second one")
+	_check(module.get("workbench") != null, "the module hosts the workbench")
+	game.config.bot_fumble_chance = 33.0
+	module.call("_on_config_field", "bot_fumble_chance", 33.0, "workbench")
+	_check(server.console.find_cvar("dr_bot_fumble").get_string().to_float() == 33.0, "a workbench edit reaches the hand-written cvar",
+		server.console.find_cvar("dr_bot_fumble").get_string())
+	game.sides[&"u91"] = 1
+	game.sides[&"u92"] = 1
+	game.sides[&"u93"] = 2
+	game.body_rules.solid = true
+	_check(not game.body_rules.blocks(&"u91", &"u92"), "team-mates pass with mp_teamblock 0")
+	_check(game.body_rules.blocks(&"u91", &"u93"), "enemies block with mp_enemyblock 1")
+	teamblock.set_value("1")
+	_check(game.body_rules.blocks(&"u91", &"u92"), "mp_teamblock 1 makes team-mates block")
+	teamblock.set_value("0")
+	game.body_rules.solid = false
+	game.sides.clear()
 
 
 func _module() -> DotModule:

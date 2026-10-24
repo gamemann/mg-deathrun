@@ -83,7 +83,6 @@ const DIED_SHOT := &"shot"
 ## [b]A trapdoor does not kill anybody; the spikes under it do.[/b] Without this every death in
 ## a pit is the course's, and the activator who opened the floor is credited with nothing —
 ## which reads to them as a press that did not work.
-const CREDIT_SECONDS := 4.0
 
 signal player_added(player_id: StringName)
 signal player_removed(player_id: StringName)
@@ -126,6 +125,12 @@ signal player_armed(player_id: StringName, weapon_id: StringName)
 signal hit_landed(player_id: StringName, point: Vector3, killed: bool, headshot: bool)
 
 @export var config: DrConfig = null
+
+## The binder that layered [member config] (cfg/ yml, env, argv); null in a suite that built the config by hand.
+var config_binder: DotGameConfigBinder = null
+
+## dot-team's block rules (`mp_teamblock`, `!block`, `!noblock`), set by the module or the client's `add_noblock`; null without dot-team.
+var block_rules: Object = null
 
 ## Whether this instance decides anything. A client sets this false.
 @export var authoritative: bool = true
@@ -416,7 +421,7 @@ func _build_combat() -> void:
 	combat.register_service = false
 
 	var rules := DotDamageRules.new()
-	rules.friendly_fire = false
+	rules.friendly_fire = config.friendly_fire
 	rules.self_damage = true
 	rules.hit_groups = true
 	combat.rules = rules
@@ -554,6 +559,8 @@ func _build_spectate() -> void:
 	spectate.name = "Spectate"
 	spectate.players = players
 	spectate.sides = sides
+	spectate.death_cam_seconds = config.death_cam_seconds
+	spectate.freeze_cam_seconds = config.freeze_cam_seconds
 	spectate.phase_fn = func() -> int: return phase
 	spectate.in_showdown_fn = func(p: int) -> bool: return p == Phase.SHOWDOWN
 	add_child(spectate)
@@ -797,6 +804,12 @@ func remove_player(player_id: StringName) -> void:
 
 func team_of(player_id: StringName) -> int:
 	return int(sides.get(player_id, 0))
+
+
+## The side a player stands on for the block rules: the team, "" for none.
+func team_of_side(id: Variant) -> Variant:
+	var side := team_of(StringName(id))
+	return str(side) if side > 0 else ""
 
 
 func side_name(side: int) -> String:
@@ -1465,7 +1478,7 @@ func _walk_after(landed: Vector3, from_index: int) -> int:
 	return best
 
 
-## Remembers the running trap somebody is in the reach of, for [constant CREDIT_SECONDS].
+## Remembers the running trap somebody is in the reach of, for `credit_seconds`.
 func _note_reach(id: StringName, feet: Vector3) -> void:
 	for index in range(stage.trap_count()):
 		if stage.trap_running(index, _tick) and stage.trap_zone(index).has_point(feet + Vector3(0.0, 0.5, 0.0)):
@@ -1480,7 +1493,7 @@ func _credited(id: StringName) -> int:
 	if entry == null:
 		return -1
 
-	if _tick - int((entry as Array)[1]) > int(CREDIT_SECONDS * float(tick_rate)):
+	if _tick - int((entry as Array)[1]) > int(config.credit_seconds * float(tick_rate)):
 		return -1
 
 	return int((entry as Array)[0])

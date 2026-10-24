@@ -94,6 +94,12 @@ extends DotConfig
 @export_range(0, 100, 1) var winner_points: int = 10
 @export_range(0, 100, 1) var first_across_points: int = 5
 
+## Whether shots hurt a player's own side (runners shooting runners, activators shooting activators).
+@export var friendly_fire: bool = false
+
+## Seconds after a runner leaves a running trap's reach that a death on the floor is still credited to whoever pressed it.
+@export_range(0.0, 30.0, 0.25) var credit_seconds: float = 4.0
+
 # --- The players -----------------------------------------------------------
 
 @export_group("The players")
@@ -227,6 +233,12 @@ extends DotConfig
 
 ## Who somebody who is out may watch: 0 anybody, 1 their own side, 2 nobody.
 @export_enum("anybody", "own side", "nobody") var spectate_camera: int = 0
+
+## Seconds the death camera holds on the spot a person fell from, then the freeze camera. Client-side only (no replicated state).
+@export_range(0.0, 10.0, 0.1) var death_cam_seconds: float = 1.5
+
+## Seconds the freeze camera holds on whoever put a player out before the free one.
+@export_range(0.0, 10.0, 0.1) var freeze_cam_seconds: float = 1.5
 
 # --- Progress --------------------------------------------------------------
 

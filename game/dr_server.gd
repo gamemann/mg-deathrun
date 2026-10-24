@@ -2,6 +2,7 @@ extends Node
 
 const DrConfig := preload("dr_config.gd")
 const DrGame := preload("dr_game.gd")
+const DrMapConfig := preload("dr_map_config.gd")
 
 ## What a [DotServer] loads as its game scene. Never a client.
 ##
@@ -31,14 +32,18 @@ func _ready() -> void:
 	# The family's `defaults < JSON < environment < argv` chain, on the server too. It is how
 	# an operator sets `DR_COURSE_SECONDS` or `--dr-columns` without editing anything, and
 	# the cvars the module adds are the live half of the same numbers.
-	var loaded := config.load_layered("user://cfg/deathrun.json")
+	# Plus the cfg/ yml layers; strict (a typo or bad value stops the boot) on a dedicated server.
+	var binder := DotGameConfigBinder.create(config, DrMapConfig.GAME, "dr", "user://cfg/deathrun.json")
+	var loaded := binder.load_layers()
 
 	if not loaded.ok:
-		DotLog.warn(CHANNEL, "falling back to defaults", {"why": loaded.error.message})
+		DotGameConfigBinder.fail_boot(get_tree(), loaded)
+		return
 
 	game = DrGame.new()
 	game.name = "World"
 	game.config = config
+	game.config_binder = binder
 	# [b]The engine's rate, which the server has already set from `sv_tickrate`.[/b] Read
 	# rather than chosen: this scene is loaded after the server has booted and executed its
 	# config, so the number is already decided — and a game that picked its own would be a
