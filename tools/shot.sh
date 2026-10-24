@@ -16,6 +16,7 @@
 #   tools/shot.sh --view=end --end-wait=3 --fire=0.4   # ...firing: flash, tracer, impact, the counter down
 #   tools/shot.sh --view=third --no-bake               # without the baked light, to compare
 #   tools/shot.sh --view=maps --seconds=0.5            # M: the solo course list with a Workshop fixture course (Name [Pack])
+#   tools/shot.sh --action emote dance                 # the local runner, third person, playing an avatar action (action_a/_b.png)
 #   tools/shot.sh --view=third --board                 # with the Tab scoreboard held open
 #   tools/shot.sh --view=course --out=res://screenshots/x.png  # any --dr-* is the game's config
 #
@@ -34,8 +35,11 @@ out=""
 # a value changed after that has already been copied into the round's rules.
 config=("--dr-warmup-seconds=0" "--dr-countdown-seconds=1")
 
+take=0
 for arg in "$@"; do
+    if [ "$take" -gt 0 ]; then config+=("$arg"); take=$((take - 1)); continue; fi
     case "$arg" in
+        --action)    config+=("$arg"); take=2; view=action ;;
         --view=*)    view="${arg#*=}" ;;
         --seconds=*) seconds="${arg#*=}" ;;
         --out=*)     out="${arg#*=}" ;;

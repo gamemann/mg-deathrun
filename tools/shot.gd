@@ -41,6 +41,9 @@ var _eye_offset := Vector3.INF
 ## `--spent`: `--view=button` presses the trap first, so the prompt says it is spent.
 var _spent := false
 var _client: Node = null
+## `--action <kind> <id>` (`--action emote dance`): the local runner, in third person, playing an
+## avatar action through the client's own input path, from the front, early and later in the clip.
+var _action: Array = []
 
 
 ## --view=maps: a fixture course pack in the shared [DotContentIndex], as the solo shell leaves
@@ -69,7 +72,12 @@ func _subscribe_fixture() -> void:
 
 
 func _ready() -> void:
-	for arg in OS.get_cmdline_user_args():
+	var user_args := OS.get_cmdline_user_args()
+	var action_at := user_args.find("--action")
+	if action_at >= 0 and action_at + 2 < user_args.size():
+		_action = [StringName(user_args[action_at + 1]), String(user_args[action_at + 2])]
+		_view = "action"
+	for arg in user_args:
 		if arg == "--no-bake":
 			DrCourse.use_bakes = false
 		elif arg.begins_with("--view="):
@@ -101,7 +109,7 @@ func _ready() -> void:
 	_client = DrClient.new()
 	_client.name = "Client"
 	_client.set("force_offline", true)
-	_client.set("third_person", _view == "third")
+	_client.set("third_person", _view == "third" or _view == "action")
 	add_child(_client)
 	# --view=cover: the loading cover dot-game's DotGameClient puts up first, before it lifts.
 	if _view == "cover":
@@ -142,6 +150,11 @@ func _run() -> void:
 		game._set_side(id, side)
 
 	game._place_everybody()
+
+	if _view == "action":
+		await _stage_action(game, local)
+		get_tree().quit(0)
+		return
 
 	if _view != "eyes" and _view != "third":
 		for id: StringName in game.players:
@@ -244,6 +257,36 @@ func _run() -> void:
 	var saved := image.save_png(path)
 	print("saved %s (%s): %s" % [_out, _view, error_string(saved)])
 	get_tree().quit(0 if saved == OK else 1)
+
+
+## Writes <out>_a.png and <out>_b.png.
+func _stage_action(game: DrGame, me: Node3D) -> void:
+	await _seconds_of(1.0)
+	var figure: Object = _client.call("_avatar_figure", 0)
+	print("action %s/%s: figure=%s third_person=%s" % [_action[0], _action[1], figure != null, _client.get("third_person")])
+	var entry := DotAvatarActions.defaults().find(_action[0], _action[1])
+	var input: Object = (_client.get("platform") as DotGameClient).avatar_actions.input
+	input.emit_signal(&"action_requested", entry)
+	var yaw := deg_to_rad(float((me.get("controller") as DotFpsController).state.yaw))
+	var ahead := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var feet: Vector3 = me.global_position
+	if figure is Node3D:
+		feet = (figure as Node3D).global_position
+	# The start pen holds the whole field shoulder to shoulder; hide the rest so the frame is about this one.
+	for id: StringName in game.players:
+		var other: Node3D = game.players[id]
+		if other != me:
+			other.visible = false
+	var camera := _free_camera()
+	for part in ["a", "b"]:
+		await _frames(12 if part == "a" else 30)
+		camera.look_at_from_position(feet + ahead * 3.2 + Vector3.UP * 1.6, feet + Vector3.UP * 1.0)
+		await _frames(3)
+		await RenderingServer.frame_post_draw
+		var path := ProjectSettings.globalize_path(_out.trim_suffix(".png") + "_%s.png" % part)
+		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+		var _saved := get_viewport().get_texture().get_image().save_png(path)
+		print("wrote ", path, " action=", figure.get("action") if figure != null else "n/a")
 
 
 func _until_a_round(game: DrGame) -> void:
