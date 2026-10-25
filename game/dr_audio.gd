@@ -1,5 +1,6 @@
 extends Node
 
+const DrAmbience := preload("dr_ambience.gd")
 const DrPaths := preload("dr_paths.gd")
 
 ## What this game makes a noise about, and the noise, on the client.
@@ -68,6 +69,9 @@ var manager: DotAudioManager = null
 ## (Kenney's footsteps, generated beds, all CC0; the addon's stock/CREDITS.md).
 var steps: DotAudioFootsteps = null
 var ambience: DotAudioAmbience = null
+
+## Quiet moods under the course (dot-audio's stock set); the old bed plays only when none loaded.
+var ambient: DotAmbienceDirector = null
 
 ## Each course's bed and the ground it is built of, for a course document that names neither
 ## (`"ambience"` and `"surface"` in a document win). Courses are machinery: the deck is steel
@@ -352,6 +356,15 @@ func setup() -> DotResult:
 	ambience.manager = manager
 	ambience.fallback_bed = &"amb_industrial"
 	add_child(ambience)
+	ambient = DotAmbienceDirector.new()
+	ambient.name = "Ambient"
+	ambient.manager = manager
+	ambient.default_mood = DrAmbience.DEFAULT_MOOD
+	ambient.prefix_moods = DrAmbience.PREFIX_MOODS
+	ambient.rules = DrAmbience.make_rules()
+	add_child(ambient)
+	var _moods := ambient.setup()
+	ambient.follow_settings(null)
 
 	# Only on a real sink: the manager has already decided whether there is a device, and a
 	# headless process has nothing to bake for.
@@ -379,7 +392,9 @@ func on_course(id: StringName, doc: Dictionary) -> void:
 	var row: Array = COURSE_SOUND.get(id, [&"amb_industrial", &"concrete"])
 	if steps != null:
 		steps.default_surface = StringName(str(doc.get("surface", row[1])))
-	if ambience != null:
+	if ambient != null and ambient.has_moods():
+		ambient.on_map(id, doc)
+	elif ambience != null:
 		ambience.set_map_bed(StringName(str(doc.get("ambience", row[0]))))
 
 

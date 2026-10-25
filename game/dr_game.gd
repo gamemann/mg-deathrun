@@ -2,6 +2,7 @@ extends Node3D
 
 const DrCatalogue := preload("dr_catalogue.gd")
 const DrConfig := preload("dr_config.gd")
+const DrAmbience := preload("dr_ambience.gd")
 const DrCourse := preload("dr_course.gd")
 const DrCourseDoc := preload("dr_course_doc.gd")
 const DrPlayer := preload("dr_player.gd")
@@ -177,6 +178,8 @@ var toy_rules: DotPropToyRules = DotPropToyRules.new()
 ## under the first and predicts its own player under the second.
 var view_rules: DotPlayerViewRules = DotPlayerViewRules.new()
 var body_rules: DotPlayerBodyRules = DotPlayerBodyRules.new()
+## The ambience cvars (`dr_ambient*`): bound by the module (REPLICATED), followed by a client through its link.
+var ambient_rules: DotAmbienceRules = DrAmbience.make_rules()
 
 
 func _init() -> void:

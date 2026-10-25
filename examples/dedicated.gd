@@ -1,5 +1,7 @@
 extends Node
 
+const DrAmbience := preload("../game/dr_ambience.gd")
+const DrAudio := preload("../game/dr_audio.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrPlayer := preload("../game/dr_player.gd")
@@ -15,8 +17,8 @@ const DrNetLink := preload("../game/net/dr_net_link.gd")
 ## [DotGameModule]'s order runs, a cvar is typed at a console and a round is played by
 ## nothing but the stand-ins the module seats itself.
 
-const SECTIONS := 12
-const CHECKS := 95
+const SECTIONS := 13
+const CHECKS := 100
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -60,6 +62,7 @@ func _run() -> void:
 		_test_rotation_file()
 		_test_finish_round_waits_for_a_live_round()
 		await _test_a_covered_seat_is_not_harmed()
+		await _test_ambient_cvars_reach_the_client()
 		await _test_it_unloads_cleanly()
 
 	_test_no_message_preloads_itself()
@@ -715,6 +718,73 @@ func _until(condition: Callable, seconds: float) -> bool:
 			return true
 		await get_tree().physics_frame
 	return bool(condition.call())
+
+
+## [b]`dr_ambient*` on a client.[/b] The server's ambience intent rides the replicated cvars over a real socket, and a
+## director that follows the game's rules (as [DrClient] wires it) has it in its layer's config; the Ambience bus follows Effects.
+func _test_ambient_cvars_reach_the_client() -> void:
+	_section("the server's dr_ambient* reaches a client's ambience director, live")
+	var side := Node.new()
+	side.name = "AmbientClient"
+	add_child(side)
+	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), side.get_path())
+	var mirror := Node.new()
+	mirror.name = "Dedicated"
+	side.add_child(mirror)
+	var link := DotClientLink.new()
+	link.name = "Server"
+	link.player_name = "Ambient"
+	link.transport_preference = "udp"
+	link.udp_address = "127.0.0.1:%d" % PORT
+	mirror.add_child(link)
+	var attach := func(_a: Variant = null, _b: Variant = null) -> void:
+		if link.get_node_or_null(NodePath(DrNetLink.NODE_NAME)) == null:
+			var sink := DrNetLink.attached_to(link, null, false)
+			sink.name = DrNetLink.NODE_NAME
+			link.add_child(sink)
+	attach.call()
+	link.phase_changed.connect(attach)
+	link.connect_to_server("127.0.0.1:%d" % PORT)
+	var rules := DrAmbience.make_rules()
+	var _followed := rules.follow_cvars(link)
+	var director := DotAmbienceDirector.new()
+	director.ambient = DotAmbience.new()
+	director.follow_settings(null, rules)
+	var joined := await _until(func() -> bool: return link.replicated_cvar("dr_ambient_volume", "") != "", 30.0)
+	_check(joined and link.replicated_cvar("dr_ambient_dir", "x") == "x",
+		"the join carried dr_ambient_volume, and the machine-local dr_ambient_dir stayed home", str(link.replicated_cvars))
+	var _vol := server.console.set_cvar("dr_ambient_volume", "0.8")
+	var _mood := server.console.set_cvar("dr_ambient_mood", "swamp")
+	var _off := server.console.set_cvar("dr_ambient", "0")
+	var arrived := await _until(func() -> bool:
+		return is_equal_approx(director.ambient.config.volume, 0.8) and director.ambient.config.mood == "swamp" \
+			and not director.ambient.config.enabled, 15.0)
+	_check(arrived, "a change of volume, mood and the switch reaches the director live", str(rules.describe()))
+	var _back_vol := server.console.set_cvar("dr_ambient_volume", "0.3")
+	var _back_mood := server.console.set_cvar("dr_ambient_mood", "")
+	var _back_on := server.console.set_cvar("dr_ambient", "1")
+	var back := await _until(func() -> bool: return rules.is_on() and rules.mood == "", 15.0)
+	_check(back, "and back", str(rules.describe()))
+
+	var audio := DrAudio.new()
+	add_child(audio)
+	var made := audio.setup()
+	_check(made.ok and audio.ambient != null and audio.ambient.manager == audio.manager,
+		"the client's audio builds a director on its manager", str(made.message if not made.ok else ""))
+	var mixer := audio.manager.mixer
+	mixer.sfx = 0.5
+	mixer.ambience = 0.8
+	var _applied := mixer.apply_to_buses()
+	_check(is_equal_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Ambience")), linear_to_db(0.4)),
+		"the Effects slider reaches the Ambience bus the director plays on")
+
+	audio.queue_free()
+	director.ambient.free()
+	director.free()
+	link.disconnect_from_server("done")
+	await get_tree().create_timer(2.0).timeout
+	side.queue_free()
+	_finished()
 
 
 func _test_it_unloads_cleanly() -> void:
