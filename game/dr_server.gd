@@ -33,7 +33,7 @@ func _ready() -> void:
 	# an operator sets `DR_COURSE_SECONDS` or `--dr-columns` without editing anything, and
 	# the cvars the module adds are the live half of the same numbers.
 	# Plus the cfg/ yml layers; strict (a typo or bad value stops the boot) on a dedicated server.
-	var binder := DotGameConfigBinder.create(config, DrMapConfig.GAME, "dr", "user://cfg/deathrun.json")
+	var binder := DrConfig.make_binder(config, "user://cfg/deathrun.json")
 	var loaded := binder.load_layers()
 
 	if not loaded.ok:

@@ -1,0 +1,46 @@
+# mg-deathrun: every key of this file at its code default, commented out. Uncomment a line to change it;
+# an operator overrides in cfg/server/game/mg-deathrun/config_round/game.yml. Layers: defaults < this < env < argv.
+
+# --- The round
+# Seconds the runners stand behind the start gate before it drops. [0.0..30.0]
+# countdown_seconds: 5.0
+# Seconds a round runs before it is called on the clock. [30.0..1800.0]
+# round_seconds: 300.0
+# Seconds a player is untouchable after being put in the end arena. [0.0..10.0]
+# arrival_grace_seconds: 1.5
+# Seconds between rounds. [0.0..60.0]
+# intermission_seconds: 6.0
+# Seconds of the round's final killcam, added to the intermission (`mp_killcam_time`); 0 is off. Not added wh... [0.0..30.0]
+# killcam_seconds: 7.0
+# Seconds of warmup before the first round. 0 starts immediately. [0.0..300.0]
+# warmup_seconds: 8.0
+# Who wins a round the clock ends: 2 the activators, 1 the runners, 0 nobody.
+# timeout_winner: 2
+
+# --- The sides
+# One activator for every this many players, and always at least one. [2..64]
+# players_per_activator: 8
+# The most activators a round has, whatever the count above asks for. More than six and the buttons are fough... [1..8]
+# max_activators: 6
+# Whether somebody who was an activator last round may be drawn again this round.
+# activator_may_repeat: false
+# Whether a player's own choice of side counts (`!activator`, `!runner`, `!any` in chat): volunteers are draw...
+# allow_side_choice: true
+# Whether a runner sees the activators. Off by default: they stand behind the course's walls watching, and th...
+# activators_seen: false
+# Points for each player on the side that wins a round, and for the first runner across. They add up over a m... [0..100]
+# winner_points: 10
+#  [0..100]
+# first_across_points: 5
+# Whether shots hurt a player's own side (runners shooting runners, activators shooting activators).
+# friendly_fire: false
+# Seconds after a runner leaves a running trap's reach that a death on the floor is still credited to whoever... [0.0..30.0]
+# credit_seconds: 4.0
+
+# --- The end
+# Which weapons a runner may be handed at the end, by id from the pack. Empty means a sensible default set.
+# weapon_pool: []
+# The weapon every activator is handed when they are called to the end. Empty draws one from the pool like a ...
+# activator_weapon: ""
+# How much more health an activator has in the end arena, as a multiple. [0.5..10.0]
+# activator_health_scale: 1.5

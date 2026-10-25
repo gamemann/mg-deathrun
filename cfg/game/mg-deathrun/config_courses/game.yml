@@ -1,0 +1,32 @@
+# mg-deathrun: every key of this file at its code default, commented out. Uncomment a line to change it;
+# an operator overrides in cfg/server/game/mg-deathrun/config_courses/game.yml. Layers: defaults < this < env < argv.
+
+# --- The courses
+# Which courses this server may play, by id. Empty means every one it has.
+# course_ids: []
+# Seconds between a button being pressed and its trap moving, added to every trap's own delay: the tell. The ... [0.0..3.0]
+# trap_tell_seconds: 0.35
+# Whether the next course is drawn at random (seeded) rather than taken in order.
+# shuffle_courses: true
+# The file that says which courses this server ROTATES; the default stem makes dot-map look through its tiers...
+# map_rotation_file: "cfg/maps.yml"
+# Where course documents are read from, beside the one built into this game. Relative to this game's own root...
+# course_directory: "courses"
+# Seed every random choice in a round is drawn from: the course, the activators, where everybody stands, the ...
+# seed_value: 20261005
+
+# --- Watching
+# Who somebody who is out may watch: 0 anybody, 1 their own side, 2 nobody.
+# spectate_camera: 0
+# Seconds the death camera holds on the spot a person fell from, then the freeze camera. Client-side only (no... [0.0..10.0]
+# death_cam_seconds: 1.5
+# Seconds the freeze camera holds on whoever put a player out before the free one. [0.0..10.0]
+# freeze_cam_seconds: 1.5
+
+# --- Progress
+# Whether the server counts per-player numbers and awards achievements at all.
+# keep_progress: true
+# Where lifetime achievement progress is written. Empty keeps it in memory.
+# progress_directory: ""
+# Whether the numbers and the unlocks are reported to the backbone. Needs a credential.
+# report_progress: false

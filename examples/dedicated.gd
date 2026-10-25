@@ -18,7 +18,7 @@ const DrNetLink := preload("../game/net/dr_net_link.gd")
 ## nothing but the stand-ins the module seats itself.
 
 const SECTIONS := 13
-const CHECKS := 100
+const CHECKS := 101
 
 const SERVER_DIR := "user://dr_dedicated"
 const PORT := 28931
@@ -183,7 +183,7 @@ func _test_the_module_loads() -> void:
 	game = DrGame.new()
 	game.name = "World"
 	game.config = config
-	game.config_binder = DotGameConfigBinder.create(config, "mg-deathrun", "dr")
+	game.config_binder = DrConfig.make_binder(config)
 	game.tick_rate = Engine.physics_ticks_per_second
 	add_child(game)
 	await get_tree().process_frame
@@ -961,6 +961,10 @@ func _noblock_and_config(module: DotModule) -> void:
 		"config fields with no hand-written cvar are dr_ cvars")
 	_check(not server.console.has_name("dr_bot_fumble_chance"), "a field with a hand-written cvar gets no second one")
 	_check(module.get("workbench") != null, "the module hosts the workbench")
+	var wb: DotGameWorkbench = module.get("workbench")
+	var amb: DotResult = wb.api.handle(DotGameWorkbench.LOCAL_ACTOR, {"op": "set", "kind": "ambience", "id": DotGameWorkbench.CVAR_SET_ID, "key": "dr_ambient_volume", "value": 0.2})
+	_check(amb.ok and is_equal_approx(server.console.get_float("dr_ambient_volume"), 0.2), "the dr_ambient* cvars are a workbench set and an edit moves the cvar", "" if amb.ok else amb.error.message)
+	var _restore := server.console.set_cvar("dr_ambient_volume", "0.3")
 	game.config.bot_fumble_chance = 33.0
 	module.call("_on_config_field", "bot_fumble_chance", 33.0, "workbench")
 	_check(server.console.find_cvar("dr_bot_fumble").get_string().to_float() == 33.0, "a workbench edit reaches the hand-written cvar",

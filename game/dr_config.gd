@@ -254,6 +254,22 @@ extends DotConfig
 @export var report_progress: bool = false
 
 
+## `@export_group` -> the cfg file it lives in: `cfg/game/mg-deathrun/config_<file>/game.yml`.
+const CFG_FILES := {
+	"The round": "round", "The sides": "round", "The end": "round",
+	"The players": "players", "The traps": "players", "Bots": "players",
+	"The courses": "courses", "Watching": "courses", "Progress": "courses",
+}
+
+
+## The binder every entry point uses: [param config] layered, one cfg file per [constant CFG_FILES] entry.
+static func make_binder(config: DotConfig, json_path := "") -> DotGameConfigBinder:
+	var b := DotGameConfigBinder.create(config, "mg-deathrun", "dr", json_path)
+	b.grouped = true
+	b.group_files = CFG_FILES
+	return b
+
+
 func env_prefix() -> String:
 	return "DR_"
 
