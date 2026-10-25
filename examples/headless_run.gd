@@ -27,7 +27,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 31
 
-const CHECKS := 149
+const CHECKS := 151
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -1231,6 +1231,21 @@ func _test_the_drawn_gun() -> void:
 	var world: DrGame = client.get("game")
 	var me: DrPlayer = client.get("player")
 	var _armed := world.arm(me, ZeeWeaponIds.SMG)
+	# Your own view is first person, so no figure is drawn yet: give it one as the third-person view does.
+	var DrFigureScript: GDScript = load("res://game/dr_figure.gd")
+	me.figure = DrFigureScript.new()
+	me.figure.person = DotHumanoidFigure.new()
+	me.figure.add_child(me.figure.person)
+	add_child(me.figure)
+	var action_fig: Object = client.call(&"_avatar_figure", 0)
+	_check(action_fig != null and action_fig == me.figure.person and action_fig.has_method(&"skeleton"),
+		"an avatar action and a wearable go on the runner's own person, which can hang a wearable",
+		"%s %s %s" % [action_fig, me.figure, me.figure.person if me.figure != null else null])
+	me.health.alive = false
+	_check(client.call(&"_avatar_figure", 0) == null, "a dead runner has no figure for an action")
+	me.health.alive = true
+	me.figure.free()
+	me.figure = null
 	for i in 4:
 		await get_tree().physics_frame
 

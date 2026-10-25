@@ -277,14 +277,14 @@ func _fall(who: DrPlayer) -> void:
 
 # --- Offline ---------------------------------------------------------------
 
-## The figure an avatar action plays on: that peer's player, or the local one offline.
+## The figure an avatar action plays on: that peer's player, or the local one offline; none once they are dead (the body is a ragdoll and the figure hidden).
 func _avatar_figure(peer_id: int) -> Object:
 	var who: DrPlayer = null
 	if bridge != null and peer_id != 0:
 		who = game.players.get(DrNetBridge.player_key(bridge.player_for_peer(peer_id)), null)
 	if who == null and player != null and (net == null or peer_id == net.local_peer_id):
 		who = player
-	return who.figure.person if who != null and who.figure != null else null
+	return who.figure.person if who != null and who.figure != null and who.is_alive() else null
 
 
 func _exit_tree() -> void:
