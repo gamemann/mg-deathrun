@@ -1859,7 +1859,9 @@ func _drive_bots() -> void:
 		command.yaw = player.controller.state.yaw
 		command.pitch = player.controller.state.pitch
 
-		if phase == Phase.IDLE or phase == Phase.COUNTDOWN:
+		if phase == Phase.COUNTDOWN and int(sides.get(id, 0)) == ACTIVATORS:
+			_bot_take_position(player, command)
+		elif phase == Phase.IDLE or phase == Phase.COUNTDOWN:
 			pass
 		elif player.at_end:
 			_bot_fight(player, command)
@@ -2069,6 +2071,27 @@ func _bot_unstick(player: DrPlayer, command: DotFpsCommand) -> void:
 ## [b]It walks to buttons in a straight line[/b], so a course's activator corridor has to be
 ## one a person can walk straight along; every course in this repository's is, and the suite
 ## runs every one with a stand-in at the buttons.
+## While the runners wait behind the gate, walks a stand-in activator to the first trap's button.
+## Run speed is the runners' too, so an activator that set off with the gate would never catch
+## the clump, and a course whose runners do not fall (dr_internet) saw no press at all.
+func _bot_take_position(player: DrPlayer, command: DotFpsCommand) -> void:
+	var first := -1
+	var first_progress := 1 << 30
+
+	for index in range(stage.trap_count()):
+		var progress := stage.route_progress(stage.trap_zone(index).get_center())
+
+		if progress >= 0 and progress < first_progress:
+			first_progress = progress
+			first = index
+
+	if first < 0 and stage.trap_count() > 0:
+		first = 0
+
+	if first >= 0:
+		var _there := bot_walk_toward(player, first, command)
+
+
 func _bot_activate(player: DrPlayer, command: DotFpsCommand) -> void:
 	var target := _bot_target_trap(player)
 

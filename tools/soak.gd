@@ -64,7 +64,7 @@ func _run() -> void:
 	config.bot_fumble_chance = 0.0
 	config.warmup_seconds = 0.0
 	config.intermission_seconds = 0.0
-	config.countdown_seconds = 0.5
+	config.countdown_seconds = 5.0  # the default: the activator walks to its first button in it
 	config.minimum_players = 0
 	config.keep_progress = false
 	config.course_ids = PackedStringArray([String(map_id)])
@@ -112,12 +112,11 @@ func _run() -> void:
 	report["traps_fired"] = _traps
 	report["finishes"] = _finishes
 	report["button_reaches"] = _reached
-	# A stand-in that never reaches a button is a dead game. One that reaches them and presses
-	# nothing is runners who never stop: they run at the activator's own speed from a start
-	# ahead of it, so it arrives as they leave (dr_internet, dr_parking_garage).
-	if _game.stage != null and _game.stage.trap_count() > 0 and _traps == 0 and _reached == 0 and cfg.minutes >= 0.5:
+	# The activator must press something: reaching a button is not enough (dr_internet and
+	# dr_parking_garage once reached them and fired nothing, the runners already past).
+	if _game.stage != null and _game.stage.trap_count() > 0 and _traps == 0 and cfg.minutes >= 0.5:
 		report["ok"] = false
-		(report["reasons"] as Array).append("the activator stand-in neither pressed nor reached a button in %d rounds" % _game.round_number)
+		(report["reasons"] as Array).append("the activator stand-in pressed nothing in %d rounds (reached a button %d times)" % [_game.round_number, _reached])
 	print(DotBotSoak.summary(report))
 	print(DotBotSoak.report_line(report))
 	var path := ProjectSettings.globalize_path("res://.godot/test-logs/soak-%s.json" % map_id)
