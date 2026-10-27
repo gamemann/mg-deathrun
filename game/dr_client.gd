@@ -2,6 +2,7 @@ extends Node
 
 const DrBindings := preload("dr_bindings.gd")
 const DrAudio := preload("dr_audio.gd")
+const DrWeaponIcons := preload("dr_weapon_icons.gd")
 const DrFigure := preload("dr_figure.gd")
 const DrSettings := preload("dr_settings.gd")
 const DrServices := preload("dr_services.gd")
@@ -316,6 +317,7 @@ func _start_offline() -> void:
 		var local := DotConsoleLocal.new()
 		console.add_source(local)
 		var _bound := skill.bind_console(local)
+		var _icons := DrWeaponIcons.shared.bind_console(local)
 
 	# Offline the world counts for the player at this keyboard, so it is the world that says
 	# what they earned. Connected, the same line arrives as a notice from the server.

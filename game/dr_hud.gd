@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 const DrGame := preload("dr_game.gd")
+const DrWeaponIcons := preload("dr_weapon_icons.gd")
 const DrPlayer := preload("dr_player.gd")
 
 ## The clock, which side you are on, how many of each are left, and — at the buttons — which
@@ -23,6 +24,8 @@ var player: DrPlayer = null
 
 ## Bottom right while armed: the weapon in hand and `magazine | reserve`. See [method _draw_ammo].
 var ammo: DotAmmoCounter = null
+## The held weapon's sprite over [member ammo]; hidden when it has none.
+var weapon_icon: TextureRect = null
 
 ## The rig the counter reads: the gun this client draws (`DrClient.weapons`), which
 ## `DrClient.correct_drawn` brings to the server's count once quiet.
@@ -254,6 +257,19 @@ func _build() -> void:
 	ammo.offset_bottom = -100.0
 	ammo.visible = false
 	_root.add_child(ammo)
+
+	weapon_icon = TextureRect.new()
+	weapon_icon.name = "WeaponIcon"
+	weapon_icon.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	weapon_icon.offset_left = -204.0
+	weapon_icon.offset_right = -24.0
+	weapon_icon.offset_top = -244.0
+	weapon_icon.offset_bottom = -180.0
+	weapon_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	weapon_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	weapon_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	weapon_icon.visible = false
+	_root.add_child(weapon_icon)
 
 	hit_marker = DotHitMarker.new()
 	hit_marker.name = "HitMarker"
@@ -515,7 +531,13 @@ func _draw_ammo() -> void:
 
 	if not shown:
 		ammo.clear()
+		weapon_icon.visible = false
 		return
+
+	var sprite := DrWeaponIcons.shared.texture(def.id)
+	weapon_icon.texture = sprite
+	weapon_icon.visible = sprite != null
+	DrWeaponIcons.shared.filter(weapon_icon, true)
 
 	var title := def.display_name if def.display_name != "" else String(def.id)
 	var held := rig.arsenal.current()
