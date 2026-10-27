@@ -1,4 +1,4 @@
-extends Node
+extends DotGameCheckSuite
 
 const DrAudio := preload("../game/dr_audio.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
@@ -26,15 +26,12 @@ const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
 const BAKE_CHECKS := 4
 
-var _passed := 0
-var _failed := 0
 var _sections_entered := 0
 ## The slowest average pace a stand-in runner may have on a course, as a share of the run speed.
 ## Measured: 0.81-0.95 on the five courses; before the landing brake Ice Works ran 0.72 (27.4 s), so 0.75 catches that and any walk (0.45).
 const RUNNER_PACE_FLOOR := 0.75
 
 var _sections_finished := 0
-var _failures := PackedStringArray()
 var _world: DrGame = null
 
 
@@ -95,28 +92,7 @@ func _run() -> void:
 	var sections := 4 + courses.size() * 5
 	var checks := 5 + PUSH_CHECKS + TELEPORT_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
-	print("")
-	print("%d sections entered, %d finished" % [_sections_entered, _sections_finished])
-	print("%d passed, %d failed" % [_passed, _failed])
-
-	for line in _failures:
-		print("  FAIL  %s" % line)
-
-	var code := 1 if _failed > 0 else 0
-
-	if _sections_entered != _sections_finished or _sections_entered != sections:
-		print("ERROR: %d of %d sections finished, %d expected." % [
-			_sections_finished, _sections_entered, sections
-		])
-		code = 1
-
-	if _passed + _failed != checks:
-		print("ERROR: %d checks ran, %d expected. A section aborted part-way." % [
-			_passed + _failed, checks
-		])
-		code = 1
-
-	get_tree().quit(code)
+	_report_sections(_sections_entered, _sections_finished, sections, checks)
 
 
 ## A teleport pad sends whoever stands on it to its `to`, facing its `heading`, and nobody beside
@@ -706,14 +682,3 @@ func _section(name: String) -> void:
 func _finished() -> void:
 	_sections_finished += 1
 
-
-func _check(ok: bool, what: String, detail: String = "") -> void:
-	if ok:
-		_passed += 1
-		print("  ok    %s%s" % [what, "" if detail == "" else "  (%s)" % detail])
-		return
-
-	_failed += 1
-	var line := "%s%s" % [what, "" if detail == "" else "  (%s)" % detail]
-	_failures.append(line)
-	print("  FAIL  %s" % line)
