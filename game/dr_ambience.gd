@@ -4,8 +4,8 @@ extends RefCounted
 
 const PREFIX := "dr"
 ## The trap sounds are the warning: the layer sits under them, with rare one-shots.
-const LEVEL := 0.3
-const RATE := 0.5
+const LEVEL := 0.15
+const RATE := 0.4
 const DEFAULT_MOOD := &"industrial"
 
 ## By course id prefix; any course not listed takes the default.
