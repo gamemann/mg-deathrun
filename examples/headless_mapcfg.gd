@@ -1,4 +1,4 @@
-extends Node
+extends DotGameCheckSuite
 
 const DrConfig := preload("../game/dr_config.gd")
 const DrMapConfig := preload("../game/dr_map_config.gd")
@@ -12,10 +12,6 @@ const DrMapConfig := preload("../game/dr_map_config.gd")
 ## The files are written to a scratch operator tier, so the rules start away from them.
 
 const CHECKS := 9
-
-var _passed := 0
-var _failed := 0
-var _failures := PackedStringArray()
 
 
 func _ready() -> void:
@@ -73,27 +69,9 @@ func _run() -> void:
 	_check(not DrMapConfig.client_keys().has("dr_round_seconds"), "the client takes only what it predicts with")
 	_check(DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://cfg/game/mg-deathrun/dot_map/map")), "the shipped starter folder exists")
 
-	print("")
-	print("%d passed, %d failed" % [_passed, _failed])
-	for line in _failures:
-		print("  FAIL  %s" % line)
-	if _passed + _failed != CHECKS:
-		print("ERROR: %d checks ran, %d expected." % [_passed + _failed, CHECKS])
-		get_tree().quit(1)
-		return
-	get_tree().quit(1 if _failed > 0 else 0)
+	_report(CHECKS)
 
 
 func _write(path: String, text: String) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	f.store_string(text)
-
-
-func _check(ok: bool, what: String) -> void:
-	if ok:
-		_passed += 1
-		print("  ok    %s" % what)
-	else:
-		_failed += 1
-		_failures.append(what)
-		print("  FAIL  %s" % what)

@@ -1,4 +1,4 @@
-extends Node
+extends DotGameCheckSuite
 
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
@@ -20,11 +20,8 @@ const SECTIONS := 5
 const MAP := &"fixture_pit"
 const DIR := "user://ws_fixture_dr/"
 
-var _passed := 0
-var _failed := 0
 var _entered := 0
 var _completed := 0
-var _failures: Array[String] = []
 
 
 func _ready() -> void:
@@ -192,14 +189,3 @@ func _test_vote() -> void:
 	vote.queue_free()
 	await get_tree().process_frame
 	_completed += 1
-
-
-func _check(condition: bool, what: String, detail: String = "") -> bool:
-	if condition:
-		_passed += 1
-		print("  ok    %s" % what)
-	else:
-		_failed += 1
-		_failures.append(what if detail == "" else "%s — %s" % [what, detail])
-		print("  FAIL  %s%s" % [what, "" if detail == "" else " — " + detail])
-	return condition
