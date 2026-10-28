@@ -64,6 +64,7 @@ func _run() -> void:
 	_check(catalogue.refused.is_empty(), "none was refused", str(catalogue.refused))
 	_check_machinery(catalogue)
 	_check_facing(catalogue)
+	_check_end_clear(catalogue)
 	_check_sound_ids()
 	_finished()
 
@@ -90,7 +91,7 @@ func _run() -> void:
 		_world.free()
 
 	var sections := 4 + courses.size() * 5
-	var checks := 5 + PUSH_CHECKS + TELEPORT_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
+	var checks := 6 + PUSH_CHECKS + TELEPORT_CHECKS + BAKE_CHECKS + courses.size() * (3 + 1 + 4 + 1) + traps + spared
 
 	_report_sections(_sections_entered, _sections_finished, sections, checks)
 
@@ -352,6 +353,69 @@ func _check_sound_ids() -> void:
 			missing.append("uncatalogued " + String(id))
 	_check(missing.is_empty() and listed.has(DotPlayerDeathReactions.SOUND_FACE_PLANT),
 		"every catalogued sound is listed, the death sounds too", ", ".join(missing))
+
+
+## Distance along a ray to the first solid box piece of a document within [param reach], or -1.
+func _clear_ahead(doc: Dictionary, from: Vector3, dir: Vector3, reach: float) -> float:
+	var best := -1.0
+
+	for piece: Dictionary in doc["pieces"]:
+		if piece["kind"] != "box":
+			continue
+
+		var inverse := Basis(Vector3.UP, deg_to_rad(float(piece.get("yaw", 0.0)))).inverse()
+		var o := inverse * (from - (piece["at"] as Vector3))
+		var d := inverse * dir
+		var half := (piece["size"] as Vector3) * 0.5
+		var t0 := 0.0
+		var t1 := reach
+
+		for axis in range(3):
+			if absf(d[axis]) < 0.00001:
+				if absf(o[axis]) > half[axis]:
+					t1 = -1.0
+				continue
+
+			var a := (-half[axis] - o[axis]) / d[axis]
+			var b := (half[axis] - o[axis]) / d[axis]
+			t0 = maxf(t0, minf(a, b))
+			t1 = minf(t1, maxf(a, b))
+
+		if t0 <= t1 and (best < 0.0 or t0 < best):
+			best = t0
+
+	return best
+
+
+## An end-arena runner spot must have room ahead: a spot against the wall it faces puts the gun
+## inside it (dr_eazy's converted arena seated runners 0.35 m from one).
+func _check_end_clear(catalogue: DrCatalogue) -> void:
+	var wrong := PackedStringArray()
+	# Converted arenas whose end area has no room to move (floorless, or a pit beside it): hand-placed areas
+	# (nightly note on mg-deathrun-maps), not a nudge.
+	var unplaced := [&"dr_oreo", &"dr_parking_garage", &"dr_internet", &"dr_internet_2"]
+
+	for id: StringName in catalogue.courses:
+		if id in unplaced:
+			continue
+
+		var doc: Dictionary = catalogue.courses[id]
+		var runners: Dictionary = (doc["end"] as Dictionary)["runners"]
+
+		for seat in range(6):
+			var spot := DrCourse.spot_in(runners, seat, 1000)
+			var facing := Basis(Vector3.UP, deg_to_rad(float(spot[1]))) * Vector3.FORWARD
+
+			# Chest and eye height: a low box underfoot is a step, not a wall.
+			for height in [0.8, 1.5]:
+				var hit := _clear_ahead(doc, (spot[0] as Vector3) + Vector3(0.0, height, 0.0), facing, 1.2)
+
+				if hit >= 0.0:
+					wrong.append("%s seat %d at %.1f m" % [id, seat, hit])
+					break
+
+	_check(wrong.is_empty(), "every end-arena runner spot has 1.2 m clear ahead of it",
+		"; ".join(wrong) if not wrong.is_empty() else "%d courses" % catalogue.courses.size())
 
 
 ## A freshly placed player faces the course, and can see it past the closed gate.
