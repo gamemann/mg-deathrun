@@ -297,6 +297,26 @@ func _build() -> void:
 
 	_build_bar()
 
+	_root.add_child(_make_crosshair())
+
+
+## dot-ui's DotCrosshair as a plain dot (no arms, no spread) where the host has it (API 14), else the old square.
+func _make_crosshair() -> Control:
+	if DotAddonApi.build_level("dot_ui") >= 14:
+		var shape: Variant = DotCrosshair
+		var cross := (shape as GDScript).new() as Control
+		cross.name = "Crosshair"
+		cross.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cross.set(&"length", 0.0)
+		cross.set(&"base_gap", 0.0)
+		cross.set(&"dot_radius", 3.0)
+		cross.set(&"colour", Color(1.0, 1.0, 1.0, 0.75))
+		cross.set(&"outline", false)
+		cross.set(&"dynamic", false)
+		cross.set(&"alive_source", func() -> bool: return player != null and is_instance_valid(player) and player.is_alive())
+		return cross
+
 	var dot := ColorRect.new()
 	dot.name = "Crosshair"
 	dot.color = Color(1.0, 1.0, 1.0, 0.75)
@@ -306,7 +326,7 @@ func _build() -> void:
 	dot.offset_right = 3.0
 	dot.offset_bottom = 3.0
 	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(dot)
+	return dot
 
 
 ## The bar along the bottom: how much of the course is behind a runner.
