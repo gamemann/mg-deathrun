@@ -134,21 +134,7 @@ func _run() -> void:
 	var local = _client.get("player")
 	var activator := _view == "activator" or _view == "button"
 
-	# One activator: the person at this keyboard for the activator's view, a stand-in otherwise.
-	var drawn := false
-
-	for id: StringName in game.players:
-		var body = game.players[id]
-		var side := DrGame.RUNNERS
-
-		if body == local:
-			side = DrGame.ACTIVATORS if activator else DrGame.RUNNERS
-		elif not activator and not drawn:
-			side = DrGame.ACTIVATORS
-			drawn = true
-
-		game._set_side(id, side)
-
+	_assign_sides(game, local, activator)
 	game._place_everybody()
 
 	if _view == "action":
@@ -188,42 +174,9 @@ func _run() -> void:
 				var _pressed := game.press(0, local.player_id)
 			await _seconds_of(0.6)
 		"trap":
-			await _seconds_of(game.config.countdown_seconds + 0.3)
-			var index: int = game.stage.trap_index(_trap) if _trap != "" else 0
-			index = maxi(index, 0)
-			var victim: Vector3 = (game.stage.traps[index]["spec"] as Dictionary).get("victim",
-				game.stage.trap_zone(index).get_center())
-			# Somebody standing in it, so the picture says what it does to a person.
-			for id: StringName in game.players:
-				var body = game.players[id]
-				if game.team_of(id) == DrGame.RUNNERS and body != local:
-					body.place_at(victim + Vector3(0.0, 0.1, 0.0), 0.0)
-					break
-			await _seconds_of(0.3)
-			var _pressed := game.press(index, local.player_id if game.team_of(local.player_id) == DrGame.ACTIVATORS \
-				else game.players_on(DrGame.ACTIVATORS)[0].player_id)
-			await _seconds_of(_after)
-			# Behind them and up, inside the corridor whichever side they are on: an offset to one
-			# side put the camera in the wall for a trap on the left half.
-			var eye := Vector3(clampf(-victim.x * 0.6, -2.4, 2.4), victim.y + 2.6, victim.z + 6.5)
-			if _eye_offset != Vector3.INF:
-				eye = victim + _eye_offset
-			_free_camera().look_at_from_position(eye, victim + Vector3(0.0, 0.9, 0.0))
+			await _pose_trap(game, local)
 		"maps":
-			# M: the solo course list, with the Workshop's course among the game's own.
-			await _seconds_of(0.5)
-			var settings: Object = _client.get("settings")
-			var menu: Variant = settings.get("menu")
-			menu.call(&"open_maps")
-			var picker: Variant = menu.get("picker")
-			if picker != null:
-				# Past the last row and back one: the fixture sorts after the shipped courses' ids.
-				var rows := game.course_rows()
-				for i in range(rows.size()):
-					if str(rows[i]["id"]) == "fixture_pit":
-						picker.call(&"turn", 99)
-						picker.call(&"turn", i - rows.size() + 1)
-			await _seconds_of(_seconds)
+			await _pose_maps(game)
 		"killcam", "reveal":
 			# A runner caught by a trap and the round decided; --seconds is how long after, so
 			# ~2 is the replay and ~7.5 the podium.
@@ -241,14 +194,7 @@ func _run() -> void:
 				_client.set("_firing", true)
 				await _seconds_of(_fire)
 		"crosshair":
-			# Alive saves to --out; then the same frame dead, to <out>_dead.png (the dot must be gone).
-			await _seconds_of(_seconds)
-			await _frames(3)
-			await RenderingServer.frame_post_draw
-			var _alive_saved := get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path(_out))
-			_client.get("player").health.alive = false
-			await _seconds_of(0.5)
-			_out = _out.get_basename() + "_dead.png"
+			await _pose_crosshair()
 		_:
 			await _seconds_of(_seconds)
 
@@ -270,6 +216,75 @@ func _run() -> void:
 
 
 ## Writes <out>_a.png and <out>_b.png.
+## One activator: the person at this keyboard for the activator's view, a stand-in otherwise.
+func _assign_sides(game: DrGame, local: Variant, activator: bool) -> void:
+	var drawn := false
+
+	for id: StringName in game.players:
+		var body = game.players[id]
+		var side := DrGame.RUNNERS
+
+		if body == local:
+			side = DrGame.ACTIVATORS if activator else DrGame.RUNNERS
+		elif not activator and not drawn:
+			side = DrGame.ACTIVATORS
+			drawn = true
+
+		game._set_side(id, side)
+
+
+func _pose_trap(game: DrGame, local: Variant) -> void:
+	await _seconds_of(game.config.countdown_seconds + 0.3)
+	var index: int = game.stage.trap_index(_trap) if _trap != "" else 0
+	index = maxi(index, 0)
+	var victim: Vector3 = (game.stage.traps[index]["spec"] as Dictionary).get("victim",
+		game.stage.trap_zone(index).get_center())
+	# Somebody standing in it, so the picture says what it does to a person.
+	for id: StringName in game.players:
+		var body = game.players[id]
+		if game.team_of(id) == DrGame.RUNNERS and body != local:
+			body.place_at(victim + Vector3(0.0, 0.1, 0.0), 0.0)
+			break
+	await _seconds_of(0.3)
+	var _pressed := game.press(index, local.player_id if game.team_of(local.player_id) == DrGame.ACTIVATORS \
+		else game.players_on(DrGame.ACTIVATORS)[0].player_id)
+	await _seconds_of(_after)
+	# Behind them and up, inside the corridor whichever side they are on: an offset to one
+	# side put the camera in the wall for a trap on the left half.
+	var eye := Vector3(clampf(-victim.x * 0.6, -2.4, 2.4), victim.y + 2.6, victim.z + 6.5)
+	if _eye_offset != Vector3.INF:
+		eye = victim + _eye_offset
+	_free_camera().look_at_from_position(eye, victim + Vector3(0.0, 0.9, 0.0))
+
+
+func _pose_maps(game: DrGame) -> void:
+	# M: the solo course list, with the Workshop's course among the game's own.
+	await _seconds_of(0.5)
+	var settings: Object = _client.get("settings")
+	var menu: Variant = settings.get("menu")
+	menu.call(&"open_maps")
+	var picker: Variant = menu.get("picker")
+	if picker != null:
+		# Past the last row and back one: the fixture sorts after the shipped courses' ids.
+		var rows := game.course_rows()
+		for i in range(rows.size()):
+			if str(rows[i]["id"]) == "fixture_pit":
+				picker.call(&"turn", 99)
+				picker.call(&"turn", i - rows.size() + 1)
+	await _seconds_of(_seconds)
+
+
+func _pose_crosshair() -> void:
+	# Alive saves to --out; then the same frame dead, to <out>_dead.png (the dot must be gone).
+	await _seconds_of(_seconds)
+	await _frames(3)
+	await RenderingServer.frame_post_draw
+	var _alive_saved := get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path(_out))
+	_client.get("player").health.alive = false
+	await _seconds_of(0.5)
+	_out = _out.get_basename() + "_dead.png"
+
+
 func _stage_action(game: DrGame, me: Node3D) -> void:
 	await _seconds_of(1.0)
 	var figure: Object = _client.call("_avatar_figure", 0)
