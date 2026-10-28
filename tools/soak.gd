@@ -49,31 +49,9 @@ func _run() -> void:
 		_fail("no course %s" % map_id)
 		return
 
-	var config := DrConfig.new()
-	config.bot_fumble_chance = 0.0
-	config.warmup_seconds = 0.0
-	config.intermission_seconds = 0.0
-	config.countdown_seconds = 5.0  # the default: the activator walks to its first button in it
-	config.minimum_players = 0
-	config.keep_progress = false
-	config.course_ids = PackedStringArray([String(map_id)])
+	_make_game(map_id)
 
-	_game = DrGame.new()
-	_game.name = "World"
-	_game.config = config
-	_game.tick_rate = TICK_RATE
-	_game.register_service = false
-	add_child(_game)
-	_game.set_physics_process(false)
-	_game.trap_fired.connect(func(_i: int, _t: int, _by: StringName) -> void: _traps += 1)
-	_game.player_finished.connect(func(_id: StringName, _p: int, _s: float) -> void: _finishes += 1)
-
-	var taken: Array = []
-	for i in range(cfg.bots):
-		var bot_name := DotBotNames.pick(taken, i, DrGame.BOT_NAMES)
-		taken.append(bot_name)
-		var bot := _game.add_player(StringName("u%d" % (900100 + i)), bot_name)
-		bot.is_bot = true
+	_seat_bots(cfg.bots)
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	_game.start()
@@ -114,6 +92,36 @@ func _run() -> void:
 		push_error("could not write %s" % path)
 	await _release_game()
 	get_tree().quit(0 if report["ok"] else 1)
+
+
+func _make_game(map_id: StringName) -> void:
+	var config := DrConfig.new()
+	config.bot_fumble_chance = 0.0
+	config.warmup_seconds = 0.0
+	config.intermission_seconds = 0.0
+	config.countdown_seconds = 5.0  # the default: the activator walks to its first button in it
+	config.minimum_players = 0
+	config.keep_progress = false
+	config.course_ids = PackedStringArray([String(map_id)])
+
+	_game = DrGame.new()
+	_game.name = "World"
+	_game.config = config
+	_game.tick_rate = TICK_RATE
+	_game.register_service = false
+	add_child(_game)
+	_game.set_physics_process(false)
+	_game.trap_fired.connect(func(_i: int, _t: int, _by: StringName) -> void: _traps += 1)
+	_game.player_finished.connect(func(_id: StringName, _p: int, _s: float) -> void: _finishes += 1)
+
+
+func _seat_bots(count: int) -> void:
+	var taken: Array = []
+	for i in range(count):
+		var bot_name := DotBotNames.pick(taken, i, DrGame.BOT_NAMES)
+		taken.append(bot_name)
+		var bot := _game.add_player(StringName("u%d" % (900100 + i)), bot_name)
+		bot.is_bot = true
 
 
 ## Frees the game before quitting: a world still loaded at quit can abort the process.
