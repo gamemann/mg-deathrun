@@ -2,10 +2,7 @@ extends Node
 
 const DrPlayer := preload("dr_player.gd")
 
-## The killcam at a round's end. Client side: every frame drawn goes into dot-replay's
-## [DotKillcamBuffer], every decisive moment (a death, a finish) is noted, and when the round
-## ends on one, [DotKillcam] replays it from the eyes of the player it happened to.
-## The length is `mp_killcam_time`; 0 skips straight to [signal over].
+## The client's killcam: frames go into [DotKillcamBuffer], decisive moments are noted, and a round ending on one is replayed by [DotKillcam]. Length is `mp_killcam_time`; 0 skips to [signal over].
 
 const CHANNEL := "deathrun.killcam"
 

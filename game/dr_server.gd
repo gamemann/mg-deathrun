@@ -5,20 +5,8 @@ const DrGame := preload("dr_game.gd")
 const DrMapConfig := preload("dr_map_config.gd")
 
 ## What a [DotServer] loads as its game scene. Never a client.
-##
-## [b]Small on purpose.[/b] Everything a dedicated server does is in `dr_module.gd`; this
-## exists because dot-server loads a SCENE and the game needs one, and because the world has
-## to be in the tree — registered under [constant DrGame.SERVICE] — before the module looks
-## for it. dot-server loads the scene and then the module, in that order, for exactly this
-## reason.
-##
-## [b]It lives in `game/`, not beside its own scene in `scenes/`.[/b] That is a deployment
-## constraint rather than a preference: a game is vendored by copying its `game/` wholesale
-## and its `scenes/*.tscn` — only the `.tscn` — so a script under `scenes/` is a script that
-## never reaches the build. The scene then fails to load with "referenced non-existent
-## resource", the module refuses to load because no game registered itself, and the server
-## reports that the game loaded but its module did not. Every other game in this family keeps
-## its server scene's script in `game/`, having learned it the same way.
+## Everything a dedicated server does is in `dr_module.gd`; this exists because dot-server loads a scene, and the world must be in the tree (under [constant DrGame.SERVICE]) before the module looks for it.
+## It lives in `game/` because a game is vendored by copying `game/` and only the `.tscn` files of `scenes/`; a script under `scenes/` never reaches the build.
 
 const CHANNEL := "dr.server"
 
@@ -29,10 +17,8 @@ var game: DrGame = null
 func _ready() -> void:
 	var config := DrConfig.new()
 
-	# The family's `defaults < JSON < environment < argv` chain, on the server too. It is how
-	# an operator sets `DR_COURSE_SECONDS` or `--dr-columns` without editing anything, and
-	# the cvars the module adds are the live half of the same numbers.
-	# Plus the cfg/ yml layers; strict (a typo or bad value stops the boot) on a dedicated server.
+	# The family's `defaults < JSON < environment < argv` chain plus the cfg/ yml layers;
+	# strict on a dedicated server, so a typo or bad value stops the boot.
 	var binder := DrConfig.make_binder(config, "user://cfg/deathrun.json")
 	var loaded := binder.load_layers()
 
@@ -44,10 +30,8 @@ func _ready() -> void:
 	game.name = "World"
 	game.config = config
 	game.config_binder = binder
-	# [b]The engine's rate, which the server has already set from `sv_tickrate`.[/b] Read
-	# rather than chosen: this scene is loaded after the server has booted and executed its
-	# config, so the number is already decided — and a game that picked its own would be a
-	# simulation running at one rate inside a process ticking at another.
+	# Read, not chosen: the server already set it from `sv_tickrate`, and a rate of our own
+	# would run the simulation at one rate inside a process ticking at another.
 	game.tick_rate = Engine.physics_ticks_per_second
 	add_child(game)
 
@@ -57,7 +41,5 @@ func _ready() -> void:
 		"round": config.round_seconds,
 	})
 
-	# [b]Not started here.[/b] `start()` lays the field out and puts everybody on it, and
-	# nothing is listening yet: the module builds the bridge that answers `world_rebuilt`, so
-	# a course laid out now is one no client is ever sent. The module
-	# starts it, on the last line of its own load.
+	# Not started here: the module builds the bridge that answers `world_rebuilt`, so a course
+	# laid out now is never sent. The module starts it, on the last line of its own load.

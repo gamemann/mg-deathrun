@@ -5,20 +5,9 @@ const DrConfig := preload("../game/dr_config.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrPlayer := preload("../game/dr_player.gd")
 
-## Bot soak on the real game: N stand-ins race one course for M simulated minutes through dot-bot's
-## DotBotSoak, fed by dot-spawn's DotSpawnWatch. A "map" here is a course id. The game draws the
-## sides itself, so with 4 stand-ins it is 3 runners and 1 activator at the buttons.
-##
-## [codeblock]
-## ./game.sh soak [course] [minutes]
-## godot --headless --path . res://tools/soak.tscn -- --map dr_temple --bots 4 --minutes 2
-## [/codeblock]
-##
-## --probe 1 prints, once a second, each activator's place, target trap and distance to its button.
-## Takes the harness's own flags too (--soak-max-stuck-sec and the rest of DotBotSoakConfig).
-## Writes .godot/test-logs/soak-<course>.json, prints the SOAK line, exits 1 when the run fails.
-## Rounds run back to back (no warm-up or intermission). A bot is only judged stuck while the
-## course is open and it has not finished. Kills are off: a trap's death is the game.
+## Bot soak on the real game: N stand-ins race one course (a "map" is a course id) for M simulated minutes through dot-bot's DotBotSoak, fed by dot-spawn's DotSpawnWatch.
+## Run: `./game.sh soak [course] [minutes]`. `--probe 1` prints each activator's place, target trap and button distance once a second; the harness's own flags work too.
+## Writes .godot/test-logs/soak-<course>.json, prints the SOAK line, exits 1 on failure. Rounds run back to back; kills are off.
 
 const DEFAULT_MAP := &"dr_temple"
 const DEFAULT_MINUTES := 1.0

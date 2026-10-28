@@ -11,22 +11,8 @@ const DrRules := preload("dr_rules.gd")
 const DrSpectate := preload("dr_spectate.gd")
 
 ## The simulation. Headless, authoritative, and the only thing that decides anything.
-##
-## [b]A round is a corridor of traps and the people pressing them.[/b] Most players are
-## runners: they start behind a gate and run one long course to its end. One or more are
-## activators, drawn fresh each round, standing in a corridor of their own beside the course
-## with a button for every trap. A runner who reaches the end is handed a weapon in the end
-## arena, and the first one there calls the activators down to meet them. Every runner dead is
-## the activators' round; every activator dead is the runners'; the clock is the activators'
-## unless the server says otherwise.
-##
-## [b]Nothing comes back.[/b] There is no respawn and no checkpoint: a trap that catches you
-## ends your round, which is what makes a press worth anything. Somebody out watches.
-##
-## [b]What it owns and what it borrows.[/b] The round, the sides and the scoreboard are
-## dot-match's (decided through [DrRules]); health and damage are dot-combat's; the weapons are
-## zee-dot-weapons'. The course, the traps and who pressed which are [DrCourse], and are this
-## game's own.
+## A round is a corridor of traps: runners run one long course to its end, activators drawn fresh each round press a button per trap from a corridor beside it. The first runner to the end arena calls the activators down; there is no respawn, so a press is worth something.
+## The round, sides and scoreboard are dot-match's (through [DrRules]); health and damage are dot-combat's; weapons are zee-dot-weapons'. The course, traps and presses are [DrCourse], this game's own.
 
 const CHANNEL := "dr.game"
 
@@ -81,9 +67,7 @@ const DIED_SHOT := &"shot"
 
 ## Seconds after being in a running trap's reach that a fall or a pit is still that trap's.
 ##
-## [b]A trapdoor does not kill anybody; the spikes under it do.[/b] Without this every death in
-## a pit is the course's, and the activator who opened the floor is credited with nothing —
-## which reads to them as a press that did not work.
+## A trapdoor does not kill anybody; the spikes under it do, so a death in a pit is still credited to the activator who opened the floor.
 
 signal player_added(player_id: StringName)
 signal player_removed(player_id: StringName)

@@ -1678,7 +1678,7 @@ func _present_effects(delta: float) -> void:
 		game.effects.advance(delta)
 
 
-# --- Watching, once out -----------------------------------------------------
+# Watching, once out
 
 ## Whether this client's own player is out and watching somebody.
 func is_spectating() -> bool:

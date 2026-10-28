@@ -5,11 +5,7 @@ const DrMapConfig := preload("../game/dr_map_config.gd")
 
 ## A course's file sets the game's rules and the next course puts them back, on the server's cvars and on the client's own config.
 ##
-## [codeblock]
-## godot --headless --path . res://examples/headless_mapcfg.tscn
-## [/codeblock]
-##
-## The files are written to a scratch operator tier, so the rules start away from them.
+## Run: `godot --headless --path . res://examples/headless_mapcfg.tscn`. The files go to a scratch operator tier, so the rules start away from them.
 
 const CHECKS := 9
 

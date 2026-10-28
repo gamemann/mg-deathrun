@@ -1,10 +1,7 @@
 extends DotGameCheckSuite
 
 ## DrConfig through DotGameConfigBinder: fields, cvars, strict refusal, the diff, a shipped yml loading back, and the workbench round trip.
-##
-## [codeblock]
-## godot --headless --path . res://examples/headless_config.tscn
-## [/codeblock]
+## Run: `godot --headless --path . res://examples/headless_config.tscn`
 
 const DrConfig := preload("../game/dr_config.gd")
 const ROOT := "user://dr_cfgtest"
