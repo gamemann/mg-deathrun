@@ -1,12 +1,7 @@
-extends DotGameModule
+extends "dr_module_base.gd"
 
-const DrNetBridge := preload("net/dr_net_bridge.gd")
-const DrServices := preload("dr_services.gd")
 
-const DrGame := preload("dr_game.gd")
-const DrPlayer := preload("dr_player.gd")
 const DrAvatars := preload("dr_avatars.gd")
-const DrVote := preload("dr_vote.gd")
 const DrMapConfig := preload("dr_map_config.gd")
 const DrAmbience := preload("dr_ambience.gd")
 ## The workbench kind of the ambience cvar set (saved to cfg/.../ambience/server.yml).
@@ -68,9 +63,6 @@ var _since_roster_check: float = 0.0
 
 ## How many stand-ins this module has put in, so it can take them out again.
 var _bot_ids: Array[StringName] = []
-
-## The players' vote for the next course; null when it could not be built.
-var vote: DrVote = null
 
 ## The drawn ballot's notice topic. The client shell draws one menu per topic.
 const COURSE_BALLOT_TOPIC := &"map_ballot"
@@ -196,6 +188,59 @@ func _game_load() -> DotResult:
 	_wire_progress(world)
 	_add_tunables(world)
 
+	_bind_rule_cvars(world)
+
+	_build_vote(world)
+
+	_bots = add_cvar(
+		"dr_bots", "1",
+		"Automatic stand-ins: 1 keeps as many as bot_quota and bot_quota_mode say, 0 none at all."
+	)
+
+	# [b]How many is dot-server's [DotBotQuota], so `bot_quota` and `bot_quota_mode` mean the
+	# same thing on every server in the family.[/b] The default is this game's own minimum
+	# (`minimum_players`, from the config file) in fill mode, which is the rule it ran before
+	# the policy was shared: stand-ins top the round up to that many players, a person who
+	# joins takes a stand-in's place, and the stand-in comes back when they leave. `dr_bots`
+	# stays the switch it always was, so a server config that sets it means what it meant.
+	_quota = DotBotQuota.install(self, world.config.minimum_players)
+
+	# dot-game's "still loading": a seat behind its client's cover is neither hurt nor eliminated
+	# (see DrGame.harm_gate). Asked by player id, resolved to a peer through the bridge.
+	world.harm_gate = func(player_id: StringName) -> bool:
+		if bridge == null:
+			return true
+		var peer := int((bridge as DrNetBridge).peer_for_player(DrNetBridge.session_of(player_id)))
+		return peer <= 0 or can_peer_be_harmed(peer)
+
+	# How well the stand-ins fight and react: dot-bot's `bot_difficulty` and its `bot_*`
+	# settings, on the world (`DrGame._aim_bot`, the activator's press).
+	var _bot_cvars := DotBotSettings.of(world).bind_cvars(add_cvar, DotConVar.FLAG_NOTIFY, add_command)
+
+	var configured := _bind_config(world)
+	if not configured.ok:
+		return configured
+
+	# [b]Started here and not in the world's own `_ready`.[/b] `start()` builds the course and
+	# puts everybody on it, and a world that did that before the bridge existed would have
+	# built a course with nothing listening to `world_rebuilt` — one the server knows about
+	# and no client is ever told about. Invisible floors: a player stands on nothing and the
+	# server says they are fine.
+	var _delivered: int = await _add_delivered_courses(world)
+
+	# The vote was built above, before these arrived; read without them, its list held only
+	# the practice course and never opened a ballot. dr_reload refreshes it the same way.
+	if vote != null:
+		vote.refresh_courses()
+
+	world.start()
+
+	log_info("the course is up", world.describe())
+	return DotResult.success(null)
+
+
+## The cvar sets of the rules objects the world holds, REPLICATED where a client predicts or draws under them.
+func _bind_rule_cvars(world: DrGame) -> void:
 	# Whether shots pass through team-mates: `mp_teammate_passthrough` 0 never, 1 a team-mate
 	# holding the muzzle (the default), 2 every team-mate in the line. dot-combat's cvar,
 	# defined there once for every game; live from the next shot, and a value the operator set
@@ -250,83 +295,6 @@ func _game_load() -> DotResult:
 		if str(made.get(&"name")) == DotSpectatorRules.CVAR_FORCE_CAMERA:
 			_force_camera_cvar = made
 
-	_build_vote(world)
-
-	_bots = add_cvar(
-		"dr_bots", "1",
-		"Automatic stand-ins: 1 keeps as many as bot_quota and bot_quota_mode say, 0 none at all."
-	)
-
-	# [b]How many is dot-server's [DotBotQuota], so `bot_quota` and `bot_quota_mode` mean the
-	# same thing on every server in the family.[/b] The default is this game's own minimum
-	# (`minimum_players`, from the config file) in fill mode, which is the rule it ran before
-	# the policy was shared: stand-ins top the round up to that many players, a person who
-	# joins takes a stand-in's place, and the stand-in comes back when they leave. `dr_bots`
-	# stays the switch it always was, so a server config that sets it means what it meant.
-	_quota = DotBotQuota.install(self, world.config.minimum_players)
-
-	# dot-game's "still loading": a seat behind its client's cover is neither hurt nor eliminated
-	# (see DrGame.harm_gate). Asked by player id, resolved to a peer through the bridge.
-	world.harm_gate = func(player_id: StringName) -> bool:
-		if bridge == null:
-			return true
-		var peer := int((bridge as DrNetBridge).peer_for_player(DrNetBridge.session_of(player_id)))
-		return peer <= 0 or can_peer_be_harmed(peer)
-
-	# How well the stand-ins fight and react: dot-bot's `bot_difficulty` and its `bot_*`
-	# settings, on the world (`DrGame._aim_bot`, the activator's press).
-	var _bot_cvars := DotBotSettings.of(world).bind_cvars(add_cvar, DotConVar.FLAG_NOTIFY, add_command)
-
-	var configured := _bind_config(world)
-	if not configured.ok:
-		return configured
-
-	# [b]Started here and not in the world's own `_ready`.[/b] `start()` builds the course and
-	# puts everybody on it, and a world that did that before the bridge existed would have
-	# built a course with nothing listening to `world_rebuilt` — one the server knows about
-	# and no client is ever told about. Invisible floors: a player stands on nothing and the
-	# server says they are fine.
-	var _delivered: int = await _add_delivered_courses(world)
-
-	# The vote was built above, before these arrived; read without them, its list held only
-	# the practice course and never opened a ballot. dr_reload refreshes it the same way.
-	if vote != null:
-		vote.refresh_courses()
-
-	world.start()
-
-	log_info("the course is up", world.describe())
-	return DotResult.success(null)
-
-
-## The courses the SERVER names for this game, fetched and added to the catalogue. Returns how
-## many documents they held.
-##
-## [b]The server's list, not this game's.[/b] A course pack used to be a `server_dependencies`
-## entry in `game.yml`, which travels in this game's own pack — so a new course meant a release
-## of the game, and a server owner could not choose which courses to run. The owner names them
-## now in their deployment's map config (dot-server-deploy's `cfg/content.yml`, which fills
-## [member DotGameDescriptor.maps]); [DotGameContent] fetches each pack and hands back its
-## `courses/` directory. A server that still names one under `server_dependencies` keeps working,
-## because DotGameContent reads those too.
-##
-## [b]Still server-only.[/b] The server sends the course it is playing in STAGE, so a client never
-## needs a course file and none of these is in a client's content sync. With nothing named, this
-## game plays its built-in course.
-##
-## [b]Called after EVERY catalogue load[/b], not only the first: `load_from` forgets everything
-## read before, and a reload that did not come back here dropped every delivered course — which
-## is what mg-wipeout and mg-deathrun did until the three were moved onto DotGameContent.
-func _add_delivered_courses(world: DrGame) -> int:
-	if server == null or world.catalogue == null:
-		return 0
-
-	var read := 0
-
-	for root in await DotGameContent.map_dirs(server, "courses"):
-		read += world.catalogue.add_directory(root)
-
-	return read
 
 
 ## Who somebody is reaches the world: a face as they are seated, and the real name and
@@ -916,154 +884,6 @@ func _on_chat_command(peer_id: int, command: String, args: PackedStringArray) ->
 		session.uid(), command, args, DotCmdContext.Source.CHAT
 	):
 		bridge.call("notice", peer_id, reply)
-
-
-func _cmd_wish(ctx: DotCmdContext, side: int) -> void:
-	var world := game as DrGame
-	if world == null or ctx.session == null:
-		ctx.reply("Only a player can choose a side.")
-		return
-	if not world.config.allow_side_choice:
-		ctx.reply("Sides are drawn on this server.")
-		return
-	world.wish_side(DrNetBridge.player_key(ctx.session.userid), side)
-	ctx.reply(
-		"You will be drawn as an activator first." if side == DrGame.ACTIVATORS
-		else ("You will only activate if nobody else can." if side == DrGame.RUNNERS else "Either side.")
-	)
-
-
-func _cmd_say(ctx: DotCmdContext) -> void:
-	var text := ctx.rest()
-
-	if text.strip_edges() == "":
-		ctx.reply("Say what?")
-		return
-
-	if services == null or services.get("chat") == null:
-		ctx.reply("This server has no chat.")
-		return
-
-	var announced: Variant = services.get("chat").call("announce", text, DrServices.CH_ALL)
-
-	if announced is DotResult and not (announced as DotResult).ok:
-		ctx.reply_error(announced)
-		return
-
-	ctx.reply("Said: %s" % text)
-
-
-func _cmd_status(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null:
-		ctx.reply("No world.")
-		return
-
-	ctx.reply_lines(world.describe_lines())
-
-
-func _cmd_net(ctx: DotCmdContext) -> void:
-	if bridge == null:
-		ctx.reply("No bridge; this server is not replicating anything.")
-		return
-
-	ctx.reply_lines(bridge.call("describe_lines"))
-
-	if services != null:
-		ctx.reply_lines(services.call("describe_lines"))
-
-
-func _cmd_courses(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null or world.catalogue == null:
-		ctx.reply("No world.")
-		return
-
-	ctx.reply_lines(world.catalogue.describe_lines())
-	ctx.reply("playing: %s" % str(world.course_doc.get("id", "-")))
-
-
-func _cmd_rotation(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null or world.catalogue == null or not world.catalogue.has_rotation_file():
-		ctx.reply("There is no maps.yml; every course rotates.")
-		return
-
-	var file := world.catalogue.rotation_file
-
-	if ctx.argc() == 0:
-		ctx.reply("Rotations: %s (active: %s)" % [", ".join(file.rotation_names()), file.active_name()])
-		return
-
-	var wanted := ctx.arg(0)
-	var switched := world.catalogue.switch_rotation(wanted)
-
-	if not switched.ok:
-		ctx.reply(switched.error.message)
-		return
-
-	if vote != null:
-		vote.refresh_courses()
-
-	ctx.reply("Rotation: %s" % wanted)
-
-
-func _cmd_maps_reload(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null or world.catalogue == null:
-		ctx.reply("No world.")
-		return
-
-	var read := world.load_rotation()
-
-	if vote != null:
-		vote.refresh_courses()
-
-	ctx.reply("maps.yml read." if read.ok else read.error.message)
-
-
-func _cmd_traps(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null or world.stage == null:
-		ctx.reply("No world.")
-		return
-
-	var tick := world.current_tick()
-
-	for index in range(world.stage.trap_count()):
-		var by: StringName = world.pressed_by.get(index, &"")
-		var who: DrPlayer = world.players.get(by)
-		ctx.reply("  %-20s %s%s" % [
-			world.stage.trap_name(index),
-			"ready" if world.stage.trap_ready(index, tick) else "spent",
-			" (by %s)" % who.display_name if who != null else "",
-		])
-
-	if world.stage.trap_count() == 0:
-		ctx.reply("This course has no traps.")
-
-
-func _cmd_reload(ctx: DotCmdContext) -> void:
-	var world := game as DrGame
-
-	if world == null or world.catalogue == null:
-		ctx.reply("No world.")
-		return
-
-	var loaded := world.catalogue.load_from(world.config.course_directory)
-	loaded += await _add_delivered_courses(world)
-	world.catalogue.apply_rotation(world.config.course_ids)
-
-	if vote != null:
-		vote.refresh_courses()
-
-	ctx.reply("%d documents read; %d refused. The next round draws from them." % [
-		loaded, world.catalogue.refused.size()])
 
 
 func describe() -> Dictionary:
