@@ -19,20 +19,13 @@ const CHANNEL := "dr.net"
 ## Bytes of acknowledgement in front of every input packet. [method DotNetManager.encode_ack].
 const ACK_BYTES := 4
 
-## Commands in every input packet: this tick's and the four before it, so a lost packet
-## costs the server no tick unless the next four are lost too. Over WebSocket nothing is
-## ever lost; over ENet (the desktop client, since servers went dual-stack) one command a
-## packet was a tick the server ran on the previous command for every packet dropped.
-## game-arena measured it first: 80% of ticks with the right command at 20% loss with one
-## copy, 99-100% with three, and five closed the rest (2026-10-09).
+## Commands in every input packet: this tick's and the four before it, so a lost packet costs no tick
+## unless the next four are lost too. Over ENet one copy meant the server ran on the previous command.
 const INPUT_COPIES := 5
 
-## How often the round clock and the numbers behind it go out, in ticks.
-##
-## [b]Twice a second, not per tick and not per snapshot.[/b] What it carries changes when
-## somebody finishes or a second passes, and a client told sixty-four times a second would be
-## paying for sixty-two copies of the same numbers. The clock itself is advanced on the
-## client between messages — see [method _apply_clock].
+## How often the round clock and its numbers go out, in ticks: twice a second, because they only
+## change when somebody finishes or a second passes. The client advances the clock between messages
+## (see [method _apply_clock]).
 const CLOCK_EVERY := 32
 
 ## The client has been told who it is. [param player_id] is the session id.
@@ -76,11 +69,8 @@ signal finished_received(player_id: int, place: int, seconds: float)
 ## The world has already been told; this is for the speakers and the screen.
 signal trap_received(index: int, tick: int, by: int)
 
-## Somebody pressed Enter. Server side, and the only thing this bridge does with chat.
-##
-## [b]The bridge carries chat and decides nothing about it.[/b] Who may say what, on which
-## channel, how often and who hears it are [DotChatRouter]'s, and the router is the services
-## layer's.
+## Somebody pressed Enter. Server side; the bridge carries chat and decides nothing, who may say
+## what is [DotChatRouter]'s.
 signal say_requested(peer_id: int, channel_id: StringName, text: String)
 
 ## A voice frame arrived. Server side; the payload is unparsed and must not be trusted —
@@ -98,13 +88,9 @@ var link: DrNetLink = null
 ## Which session this process is. Zero on a server.
 var local_player_id: int = 0
 
-## Where the clock learns how long the link is, in milliseconds.
-##
-## dot-net never touches a transport and cannot measure it; dot-server's heartbeat already
-## does ([method DotClientLink.ping_ms]). A client that feeds nothing has a clock that
-## assumes an instant connection and stamps every command for a tick the server has already
-## simulated — and the symptom is every command being discarded as late. Two games in this
-## family shipped without a sample and read a median of an empty set.
+## Where the clock learns the link's length in milliseconds; dot-net cannot measure a transport,
+## dot-server's heartbeat can ([method DotClientLink.ping_ms]). With no sample every command is
+## stamped for a tick already simulated and discarded as late.
 var rtt_source: Callable = Callable()
 
 ## Where a voice frame goes on the server. Assigned by [DotGameModule] to the services
@@ -121,12 +107,8 @@ var _entities: Node = null
 ## session id -> [DrPlayerNet].
 var _behaviours: Dictionary = {}
 
-## The next session id handed to somebody the world made itself.
-##
-## [b]Well above anything dot-server will issue, and a bot needs one at all because of how a
-## player id is written.[/b] Every id on the wire is `u<session>`, and a player called `bot`
-## parses back to session ZERO — so two bots are one entry in [member _behaviours], and
-## their JOIN carries a player id that is also dot-net's broadcast address.
+## The next session id for somebody the world made itself, well above anything dot-server issues.
+## A bot needs one because a player called `bot` parses back to session ZERO, dot-net's broadcast address.
 const FIRST_BOT_SESSION := 900000
 
 var _next_bot_session: int = FIRST_BOT_SESSION
@@ -136,25 +118,16 @@ var _peer_of_player: Dictionary = {}
 var _ready_peers: Dictionary = {}
 ## Carries the game's profile runtime over this manager (rows down, for a remote admin's panel).
 var profile_link: DotNetProfileLink = null
-## Server: peers whose READY came before their seat ([method add_player]). A client sends READY
-## when its link says PLAYING, which the link decides itself after sending `loaded` on another
-## channel; over ENet with loss the READY can overtake `loaded`, and a READY dropped here left
-## that client waiting for a world for ever. Admitted when seated.
+## Server: peers whose READY came before their seat ([method add_player]); over lossy ENet READY can
+## overtake `loaded`. Admitted when seated.
 var _ready_unseated: Dictionary = {}
 
 var _tick: int = 0
 var _game_ticked_for: int = -1
 
-## Server only: whether [method DotNetManager.server_tick] is on the stack, and the net ids
-## let go of while it was.
-##
-## [b]An entity let go of mid-tick leaks a lag-compensation track, for ever.[/b]
-## mg-smash-copter's finding: the world ticks inside the first player behaviour's
-## `_net_simulate`, so a player removed there is unregistered while `server_tick` is still
-## holding the identity list it took before simulating — and then records history for it. The registry has
-## already told the history to forget each id; the record makes a fresh track for it again,
-## and nothing ever forgets it a second time.
-## Forgotten again here once the manager has let go of its list.
+## Server only: whether [method DotNetManager.server_tick] is on the stack, and the net ids let go of
+## meanwhile. An entity freed mid-tick would get a fresh lag-compensation track recorded for it
+## that nothing forgets; they are forgotten again once the manager lets go of its list.
 var _in_server_tick := false
 var _unregistered_in_tick: Array[int] = []
 var _client_ticked_for: int = -1

@@ -97,10 +97,8 @@ func _test_exits_clean(probe: Array) -> void:
 	var stderr: String = probe[2]
 	var hung: bool = probe[3]
 	var seconds: int = probe[4]
-	# Every leak line is the engine's, and the engine writes them to stderr; both are
-	# searched so that stays a fact about the engine rather than an assumption here. Shown
-	# apart, because a pipe each is two streams whose interleaving is lost, and where a hung
-	# copy had got to is the end of its stdout.
+	# Leak lines are the engine's and go to stderr; search both streams, but show them apart
+	# because two pipes lose their interleaving.
 	var text := stdout + "\n" + stderr
 	var tail := "its last lines:\n%s\nand the last on stderr:\n%s" % [
 		_last_lines(stdout, 15), _last_lines(stderr, 10)

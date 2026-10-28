@@ -32,12 +32,8 @@ var _started_msec: int = Time.get_ticks_msec()
 ## What the game sounds like. See [DrAudio].
 var audio: DrAudio = null
 
-## The weapons in this player's own hands, once they have been handed one at the end.
-##
-## [b]Drawn, never decided.[/b] `authority` is false and every shot that matters is the
-## server's; what this rig is for is a view model that moves — a deploy, a reload, a recoil
-## kick — because a weapon that appears fully formed and never animates reads as a texture
-## stuck to the screen.
+## The weapons in this player's own hands, drawn and never decided: `authority` is false
+## and every shot that matters is the server's; the rig is only a view model that moves.
 var weapons: ZeeWeaponRig = null
 
 var net: DotNetManager = null
@@ -62,14 +58,9 @@ var _portraits: Dictionary = {}
 ## Simulated seconds the drawn gun has gone without a trigger, a reload or a switch.
 var _drawn_quiet: float = 0.0
 
-## The Tab board: dot-menu's, with this game's columns. The platform builds it, feeds it and holds it
-## on Tab (see [method _build_settings]).
-##
-## [b]Online it is the server's roster with this game's numbers merged in.[/b] Names, pings
-## and how long each player has been on come from dot-server, which is the only thing that
-## knows them for everybody; points, the face and the side are already replicated here, so
-## they are joined in by id rather than sent twice. The two sides are the board's teams, the
-## runners first. Offline there is no server and the board is [method board_snapshot].
+## The Tab board: dot-menu's with this game's columns, fed and held on Tab by the platform.
+## Online it is the server's roster (names, pings, time on) joined by id with the replicated points,
+## face and side; offline it is [method board_snapshot].
 func _dress_board() -> void:
 	if board == null:
 		return
@@ -196,13 +187,9 @@ func _drive_view_model(command: DotFpsCommand) -> void:
 
 
 
-## Brings the drawn gun's magazine and reserve (what the HUD counts) to the server's once it has
-## been quiet [constant DRAWN_SETTLE_SEC]: online from this player's owner-only snapshot fields,
-## offline from the world's own rig. True when it changed anything.
-##
-## [b]The drawn gun predicts, so it can be wrong, and nothing else puts it right.[/b] A shot the
-## server refused or a fresh round's refill leaves the counter on the client's own sum otherwise
-## (mg-prop-hunt's `correct_drawn`, game-zombie-zone's 15 / 105).
+## Brings the drawn gun's magazine and reserve to the server's once quiet [constant DRAWN_SETTLE_SEC]
+## (online from the owner-only snapshot fields, offline from the world's rig); true when it changed.
+## The drawn gun predicts, so a refused shot or a round refill leaves it wrong with nothing else to fix it.
 func correct_drawn() -> bool:
 	if weapons == null or weapons.arsenal == null or _drawn_quiet < DRAWN_SETTLE_SEC:
 		return false
@@ -256,13 +243,9 @@ func _server_count() -> Dictionary:
 	}
 
 
-## Poses the course for this FRAME, between two ticks.
-##
-## [b]A frame, not a tick: the obstacles are drawn at the time the frame shows.[/b] The arms
-## and the movers are a function of time, so the client can draw them at the exact fraction
-## through a tick this frame is — which no snapshot could give it. The local player's own
-## prediction poses the course back at its tick before every simulated tick (see
-## [DrController]), so drawing it between them never moves what a tick is swept against.
+## Poses the course for this FRAME, between two ticks: arms and movers are a function of time,
+## so the exact fraction through a tick can be drawn. The local prediction re-poses the course at
+## its tick before each simulated tick (see [DrController]), so a sweep never sees this pose.
 func _pose_stage() -> void:
 	if game == null or game.stage == null or game.stage.doc.is_empty():
 		return
@@ -272,10 +255,8 @@ func _pose_stage() -> void:
 
 	if net != null and net.is_running():
 		tick = float(net.clock.tick)
-		# At the alpha your own player is drawn at (see `present_frame`), so a clock slip
-		# moves the course and the player on it together; at the engine's fraction a rider
-		# on a mover slid a tick against it for a moment after each. By name, for an older
-		# shell's dot-net.
+		# At your own player's draw alpha (see `present_frame`), so a clock slip moves course and
+		# player together. By name, for an older shell's dot-net.
 		if net.clock.has_method(&"render_alpha"):
 			alpha = float(net.clock.call(&"render_alpha"))
 
@@ -317,23 +298,9 @@ func _present_effects(delta: float) -> void:
 # Watching, once out
 
 
-## Everything a frame draws that a tick does not, in this order: the netcode's
-## interpolation, then every player's body, then every beacon. Returns how many bodies are
-## shown. Static so the net suite drives exactly this and not a copy of it.
-##
-## [b]The interpolation was never called in this game, and a comment here said it was.[/b]
-## `present_beacons`, which this replaces, read a remote player's node on the grounds that
-## "everybody else's node is written by the interpolator once a frame already" — and nothing
-## anywhere called `DotNetManager.interpolate_frame`, so nothing wrote it. The
-## `_net_interpolated` hooks on `DrPlayerNet` and `DrPropNet` were written, documented and
-## reached by nothing, and every remote player and prop moved only when a snapshot landed —
-## mg-smash-copter's finding, the render-jitter class. The other half was that a remote player had no body to move
-## ([DrFigure]).
-##
-## [param first_person] is whether [param own]'s camera is behind their eyes, which is what
-## hides their own body. [param alpha] is the fraction through the current tick; -1 derives it
-## from the engine, which is what a real frame wants. A suite passes it, because a suite's
-## frames are not an engine's.
+## Everything a frame draws that a tick does not: the netcode's interpolation, every player's body,
+## then every beacon; returns how many bodies are shown. Static so the net suite drives this, not a copy.
+## [param first_person] hides own body; [param alpha] is the fraction through the tick, -1 for the engine's.
 static func present_frame(
 	p_net: DotNetManager,
 	p_game: DrGame,
@@ -348,12 +315,9 @@ static func present_frame(
 	if networked:
 		p_net.interpolate_frame(alpha)
 
-	# Your own player is drawn at the clock's render alpha, not the engine's fraction: the
-	# clock stretches and shrinks its ticks while it settles on the server, so a physics frame
-	# now and then runs no tick or two, and drawn at the engine's fraction the eye stood still
-	# on one frame and moved double on the next. `DotFpsController.render_state` reads it from
-	# `render_clock` (dot-player-controller); by name both ways, so a shell older than either
-	# draws as before. Null offline, where every physics frame is one tick.
+	# Own player is drawn at the clock's render alpha, not the engine's fraction: the clock stretches
+	# its ticks while settling, so the engine's fraction stalls then doubles the eye. By name both
+	# ways for an older shell; null offline.
 	if own != null and own.controller != null:
 		own.controller.set(&"render_clock", p_net.clock if networked else null)
 
@@ -394,14 +358,9 @@ static func present_frame(
 	return shown
 
 
-## Where this frame draws [param body].
-##
-## [b]Two sources, and which one is not a detail.[/b] A player somebody else simulates — any
-## [param remote] player on a connected client — is placed by the interpolator, which writes
-## their node once a frame; their controller never ticks here, so its render state is a blend
-## of two ticks that never happened. A player THIS process simulates — the local player, and
-## every offline stand-in — has a node that moves once a tick, and `render_state` is the
-## blend between the last two, which is what the camera is drawn from too.
+## Where this frame draws [param body]. A [param remote] player is placed by the interpolator (its
+## controller never ticks here); a player this process simulates blends its last two ticks via
+## `render_state`, which the camera uses too.
 static func drawn_position(body: DrPlayer, remote: bool) -> Vector3:
 	if remote or body.controller == null:
 		return body.global_position

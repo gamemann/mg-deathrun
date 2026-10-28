@@ -12,24 +12,9 @@ const DrVote := preload("dr_vote.gd")
 var vote: DrVote = null
 
 
-## The courses the SERVER names for this game, fetched and added to the catalogue. Returns how
-## many documents they held.
-##
-## [b]The server's list, not this game's.[/b] A course pack used to be a `server_dependencies`
-## entry in `game.yml`, which travels in this game's own pack — so a new course meant a release
-## of the game, and a server owner could not choose which courses to run. The owner names them
-## now in their deployment's map config (dot-server-deploy's `cfg/content.yml`, which fills
-## [member DotGameDescriptor.maps]); [DotGameContent] fetches each pack and hands back its
-## `courses/` directory. A server that still names one under `server_dependencies` keeps working,
-## because DotGameContent reads those too.
-##
-## [b]Still server-only.[/b] The server sends the course it is playing in STAGE, so a client never
-## needs a course file and none of these is in a client's content sync. With nothing named, this
-## game plays its built-in course.
-##
-## [b]Called after EVERY catalogue load[/b], not only the first: `load_from` forgets everything
-## read before, and a reload that did not come back here dropped every delivered course — which
-## is what mg-wipeout and mg-deathrun did until the three were moved onto DotGameContent.
+## The courses the SERVER names (its map config, via [DotGameContent]), fetched and added to the
+## catalogue; returns how many documents they held. Server-only: clients get the course in STAGE.
+## Call after EVERY catalogue load, because `load_from` forgets what was read before.
 func _add_delivered_courses(world: DrGame) -> int:
 	if server == null or world.catalogue == null:
 		return 0

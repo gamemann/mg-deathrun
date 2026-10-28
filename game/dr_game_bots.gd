@@ -46,15 +46,9 @@ func _floor_at(point: Vector3) -> bool:
 	return not world.direct_space_state.intersect_ray(query).is_empty()
 
 
-## Steers a bot in the air so it comes down on [param target] rather than past it.
-##
-## [b]Measured along the way it is going, not along the line to the target.[/b] mg-wipeout's
-## version projected the overshoot onto the direction of the target, which is right while the
-## target is ahead and wrong once it is nearly underneath: a block half a metre to the side
-## projects a two-metre overshoot onto almost nothing, and the bot stopped braking over the
-## block it then sailed past. Here the landing is predicted, the overshoot is how far past
-## the target it is along the velocity, and the brake is the constant deceleration that takes
-## exactly that much off in the time left — `2·over / t²`, spread over the ticks.
+## Steers a bot in the air so it lands on [param target] rather than past it. The overshoot is
+## measured along the velocity, not toward the target (which reads zero when nearly above it); the brake
+## is the constant deceleration `2·over / t²` that removes it in the time left.
 func _bot_land_on(player: DrPlayer, command: DotFpsCommand, target: Vector3) -> void:
 	var state := player.controller.state
 	var flat := Vector3(state.velocity.x, 0.0, state.velocity.z)
@@ -101,11 +95,8 @@ func _bot_land_on(player: DrPlayer, command: DotFpsCommand, target: Vector3) -> 
 	command.move = Vector2(0.0, -clampf(wanted / maxf(full, 0.01), 0.05, 1.0))
 
 
-## The walkway point to count as already reached at the start of a round: the one nearest
-## [param stop] (by position in the list) that is close and in the open.
-## A tour that runs the whole course in one order revisits its own corridors, so without this
-## an activator spawned beside the stretch it needs walked the tour from the start and
-## arrived after every runner had passed.
+## The walkway point already reached at round start: the nearest to [param stop] that is close and in
+## the open. A tour revisits its own corridors, so without it a late activator walks from the start.
 func _walkway_shortcut(player: DrPlayer, points: Array, here: int, stop: int) -> int:
 	var at := player.controller.state.position
 	var best := here
@@ -215,14 +206,8 @@ func _nearest_enemy(player: DrPlayer) -> DrPlayer:
 	return best
 
 
-## Aims a stand-in at [param target] the way a person does and says whether it fires this
-## tick: dot-bot's [DotBotAim] on this game's `bot_difficulty`, so the view turns at
-## `bot_turn_rate`, the first shots miss by `bot_aim_error` and settle, and the trigger waits
-## `bot_reaction` after first sight. It used to snap onto the target on the first tick and hold
-## the trigger, off by one random `dr_bot_spread` per round.
-##
-## [b]Seeded per bot and per round[/b], so an empty server does not play the same fight every
-## round (mg-smash-copter's finding).
+## Aims a stand-in at [param target] with dot-bot's [DotBotAim] on `bot_difficulty` and says whether
+## it fires this tick. Seeded per bot and per round so an empty server does not replay one fight.
 func _aim_bot(player: DrPlayer, command: DotFpsCommand, target: DrPlayer) -> void:
 	var aim: DotBotAim = _bot_hands.get(player.player_id)
 
@@ -244,4 +229,4 @@ func _aim_bot(player: DrPlayer, command: DotFpsCommand, target: DrPlayer) -> voi
 	command.set_button(DotFpsCommand.BUTTON_USER_0, fire)
 
 
-# --- Reacting ---------------------------------------------------------------
+# Reacting
