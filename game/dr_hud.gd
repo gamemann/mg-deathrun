@@ -229,10 +229,8 @@ func _build() -> void:
 	_traps.offset_bottom = -110.0
 	_traps.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
-	# Above the chat box, because the chat box also draws itself bottom-left: mg-wipeout's
-	# first render had the health number and the first line of chat in the same forty pixels.
-	# Above its FULL eight-row log, which reaches 202 pixels off the bottom: the plate is 56
-	# tall and ends at 206 (checked in headless_run). The old number ended at 150, over it.
+	# Above the chat box's full eight-row log, which reaches 202 pixels off the bottom: the plate
+	# is 56 tall and ends at 206 (checked in headless_run).
 	vitals = DotVitals.new()
 	vitals.name = "Vitals"
 	vitals.bar_end = 220.0
@@ -245,9 +243,33 @@ func _build() -> void:
 	vitals.visible = false
 	_root.add_child(vitals)
 
+	_build_gun_pieces()
 
-	# Bottom right, above the field line: what is in hand and how much is in it. The play test
-	# found a gun with no counter anywhere; dot-ui's DotAmmoCounter is the family's one.
+	_field = _label(size)
+	_field.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	_field.offset_left = -460.0
+	_field.offset_right = -30.0
+	_field.offset_top = -80.0
+	_field.offset_bottom = -26.0
+	_field.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	watching_label = _label(size)
+	watching_label.name = "Watching"
+	watching_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+	watching_label.offset_left = -520.0
+	watching_label.offset_right = 520.0
+	watching_label.offset_top = -140.0
+	watching_label.offset_bottom = -104.0
+	watching_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	watching_label.add_theme_color_override("font_color", Color(0.80, 0.90, 1.0))
+
+	_build_bar()
+
+	_root.add_child(_make_crosshair())
+
+
+## Bottom right, above the field line: the ammo counter, the held gun's sprite and the hit marker.
+func _build_gun_pieces() -> void:
 	ammo = DotAmmoCounter.new()
 	ammo.name = "Ammo"
 	ammo.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -276,28 +298,6 @@ func _build() -> void:
 	hit_marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hit_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(hit_marker)
-
-	_field = _label(size)
-	_field.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	_field.offset_left = -460.0
-	_field.offset_right = -30.0
-	_field.offset_top = -80.0
-	_field.offset_bottom = -26.0
-	_field.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-
-	watching_label = _label(size)
-	watching_label.name = "Watching"
-	watching_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	watching_label.offset_left = -520.0
-	watching_label.offset_right = 520.0
-	watching_label.offset_top = -140.0
-	watching_label.offset_bottom = -104.0
-	watching_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	watching_label.add_theme_color_override("font_color", Color(0.80, 0.90, 1.0))
-
-	_build_bar()
-
-	_root.add_child(_make_crosshair())
 
 
 ## dot-ui's DotCrosshair as a plain dot (no arms, no spread) where the host has it (API 14), else the old square.
