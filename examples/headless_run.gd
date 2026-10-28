@@ -1236,7 +1236,33 @@ func _test_the_drawn_gun() -> void:
 		held.append("%d:%s/%s" % [slot, a, b])
 		same = same and a == b
 	_check(same, "the drawn gun holds exactly the server's weapons, slot for slot", " ".join(held))
+	_drawn_gun_hud_checks(client, drawn)
+	var hud: Node = client.get("hud")
 
+	var world_count := me.weapons.arsenal.current().magazine
+	drawn.arsenal.current().magazine = maxi(world_count - 5, 0)
+	client.set("_drawn_quiet", 0.0)
+	for i in 10:
+		await get_tree().physics_frame
+	var early := drawn.arsenal.current().magazine
+	for i in 60:
+		await get_tree().physics_frame
+	_check(early == maxi(world_count - 5, 0) and drawn.arsenal.current().magazine == world_count,
+		"the drawn gun takes the server's count once quiet, and not before",
+		"after 10 ticks %d, after 70 %d, server %d" % [early, drawn.arsenal.current().magazine, world_count])
+
+	var marker: DotHitMarker = hud.get("hit_marker")
+	world.hit_landed.emit(&"local", Vector3(0.0, 1.0, -4.0), true, false)
+	_check(marker != null and marker.alpha() > 0.9 and marker.kill, "a hit the world confirms flashes the marker, a kill's")
+
+	remove_child(client)
+	client.free()
+	await get_tree().process_frame
+	_finished()
+
+
+## The HUD half of the drawn-gun section: counter, weapon sprite and its placement.
+func _drawn_gun_hud_checks(client: Node, drawn: ZeeWeaponRig) -> void:
 	var hud: Node = client.get("hud")
 	hud.call("_process", 0.0)
 	var counter: DotAmmoCounter = hud.get("ammo")
@@ -1262,31 +1288,9 @@ func _test_the_drawn_gun() -> void:
 	hud.call("_process", 0.0)
 	_check(icon_rect != null and icon_rect.visible and icon_rect.get_global_rect().end.y <= counter.get_global_rect().position.y + 4.0,
 		"the sprite sits above the ammunition plate, not on it")
-
 	_check(counter.anchor_left == 1.0 and counter.anchor_top == 1.0 and counter.offset_top >= -180.0
 		and counter.offset_bottom <= -100.0,
 		"it sits bottom right, above the field line and clear of the chat and the health plate")
-
-	var world_count := me.weapons.arsenal.current().magazine
-	drawn.arsenal.current().magazine = maxi(world_count - 5, 0)
-	client.set("_drawn_quiet", 0.0)
-	for i in 10:
-		await get_tree().physics_frame
-	var early := drawn.arsenal.current().magazine
-	for i in 60:
-		await get_tree().physics_frame
-	_check(early == maxi(world_count - 5, 0) and drawn.arsenal.current().magazine == world_count,
-		"the drawn gun takes the server's count once quiet, and not before",
-		"after 10 ticks %d, after 70 %d, server %d" % [early, drawn.arsenal.current().magazine, world_count])
-
-	var marker: DotHitMarker = hud.get("hit_marker")
-	world.hit_landed.emit(&"local", Vector3(0.0, 1.0, -4.0), true, false)
-	_check(marker != null and marker.alpha() > 0.9 and marker.kill, "a hit the world confirms flashes the marker, a kill's")
-
-	remove_child(client)
-	client.free()
-	await get_tree().process_frame
-	_finished()
 
 
 func _test_the_map_menu() -> void:
