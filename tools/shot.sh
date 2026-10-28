@@ -10,7 +10,7 @@
 #   tools/shot.sh --view=trap --trap=t29 --eye=-7,2.5,-5  # ...from a camera 7 m behind, 2.5 up and 5 to the side of the victim (a corridor along +X)
 #   tools/shot.sh --view=third --seconds=8             # third person, on the course
 #   tools/shot.sh --view=cover                         # the loading cover, before it lifts
-#   tools/shot.sh --view=end                           # the end arena, from a runner who made it
+#   tools/shot.sh --view=end                           # the end arena, from a runner who made it (dr_foundry unless --dr-course-ids)
 #   tools/shot.sh --view=killcam --seconds=2           # the round's last moment replayed (--seconds=7.5: the podium)
 #   tools/shot.sh --view=end --end-wait=5              # ...once the weapon they were handed is out
 #   tools/shot.sh --view=end --end-wait=3 --fire=0.4   # ...firing: flash, tracer, impact, the counter down
@@ -48,6 +48,11 @@ for arg in "$@"; do
         *)           echo "unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
+
+# dr_eazy's runners arrive 0.35 m from a wall, which hides the gun; dr_foundry's end arena has room.
+if [ "$view" = end ] && ! printf '%s\n' "${config[@]}" | grep -q -- '--dr-course-ids='; then
+    config+=("--dr-course-ids=dr_foundry")
+fi
 
 [ -n "$out" ] || out="res://screenshots/${view}.png"
 

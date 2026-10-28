@@ -251,6 +251,7 @@ func _run() -> void:
 		menu.handle_event(tab)
 
 	await _frames(3)
+	_report_view_model()
 	var image := get_viewport().get_texture().get_image()
 	var path := ProjectSettings.globalize_path(_out)
 	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
@@ -294,6 +295,22 @@ func _until_a_round(game: DrGame) -> void:
 		if game.phase == DrGame.Phase.COUNTDOWN and _client.get("player") != null:
 			return
 		await get_tree().process_frame
+
+
+## Says whether the runner's gun is built, and how far the camera is from the wall it faces: the
+## view model hangs a metre ahead of the eyes, so a wall nearer than that hides all of it.
+func _report_view_model() -> void:
+	var vm: Variant = _client.get("view_model")
+	if vm == null:
+		return
+	var cam := get_viewport().get_camera_3d()
+	var from := cam.global_position
+	var query := PhysicsRayQueryParameters3D.create(from, from - cam.global_basis.z * 3.0)
+	var hit := cam.get_world_3d().direct_space_state.intersect_ray(query)
+	var wall := INF if hit.is_empty() else from.distance_to(hit["position"])
+	print("view model %s, wall %.2f m ahead%s" % [
+		"visible" if vm.visible else "hidden", wall,
+		" (under 1 m: the gun is inside it, pick another course)" if wall < 1.0 else ""])
 
 
 func _free_camera() -> Camera3D:
