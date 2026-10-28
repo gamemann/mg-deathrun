@@ -391,9 +391,8 @@ func _clear_ahead(doc: Dictionary, from: Vector3, dir: Vector3, reach: float) ->
 ## inside it (dr_eazy's converted arena seated runners 0.35 m from one).
 func _check_end_clear(catalogue: DrCatalogue) -> void:
 	var wrong := PackedStringArray()
-	# Converted arenas whose end area has no room to move (floorless, or a pit beside it): hand-placed areas
-	# (nightly note on mg-deathrun-maps), not a nudge.
-	var unplaced := [&"dr_oreo", &"dr_parking_garage", &"dr_internet", &"dr_internet_2"]
+	# dr_parking_garage's end area is still to be hand-placed (its map is mid-rework).
+	var unplaced := [&"dr_parking_garage"]
 
 	for id: StringName in catalogue.courses:
 		if id in unplaced:
