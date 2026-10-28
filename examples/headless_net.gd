@@ -617,17 +617,8 @@ func _test_leaving() -> void:
 
 # --- Helpers --------------------------------------------------------------------
 
-## sv_workbench_remote over the real frames, in the order DrModule and DrClient register them: an admin gets a
-## panel and an edit that applies and replicates; a guest, a non-admin, a revoked admin and the cvar off are refused.
-func _test_the_remote_workbench() -> void:
-	_section("[a flagged admin edits the server's profiles, and nobody else can]")
-	if not DotGameWorkbench.available():
-		print("  dot-workbench is not linked: skipped")
-		_passed += 16
-		_finished()
-		return
-	var flags := {"boss": ["cvar", "root"], "plain": []}
-	var state := {"on": false, "uid": "", "now": 100000}
+## The server and the client workbench wired to each other through the two managers, with the admin gate reading [param flags] and [param state].
+func _workbench_rig(flags: Dictionary, state: Dictionary) -> Dictionary:
 	var snet := _make_manager(true, &"wbserver", 1, self, SERVER_TICK_RATE)
 	var cnet := _make_manager(false, &"wbclient", 5, self, SERVER_TICK_RATE)
 	var sconfig := DrConfig.new()
@@ -681,6 +672,33 @@ func _test_the_remote_workbench() -> void:
 	add_child(cwb)
 	var cstarted := cwb.start(crt)
 	_check(cstarted.ok and cwb.overlay == null, "the client's workbench starts with no panel")
+	return {"snet": snet, "cnet": cnet, "sbinder": sbinder, "sconfig": sconfig, "set": set, "swb": swb, "slink": slink, "cremote": cremote, "crt": crt, "clink": clink, "remote": remote, "cwb": cwb}
+
+
+## sv_workbench_remote over the real frames, in the order DrModule and DrClient register them: an admin gets a
+## panel and an edit that applies and replicates; a guest, a non-admin, a revoked admin and the cvar off are refused.
+func _test_the_remote_workbench() -> void:
+	_section("[a flagged admin edits the server's profiles, and nobody else can]")
+	if not DotGameWorkbench.available():
+		print("  dot-workbench is not linked: skipped")
+		_passed += 16
+		_finished()
+		return
+	var flags := {"boss": ["cvar", "root"], "plain": []}
+	var state := {"on": false, "uid": "", "now": 100000}
+	var rig := _workbench_rig(flags, state)
+	var snet: DotNetManager = rig["snet"]
+	var cnet: DotNetManager = rig["cnet"]
+	var sbinder = rig["sbinder"]
+	var sconfig: DrConfig = rig["sconfig"]
+	var set: DotProfileSet = rig["set"]
+	var swb: DotGameWorkbench = rig["swb"]
+	var slink = rig["slink"]
+	var cremote: DotGameWorkbenchRemoteClient = rig["cremote"]
+	var crt: DotProfileRuntime = rig["crt"]
+	var clink = rig["clink"]
+	var remote = rig["remote"]
+	var cwb: DotGameWorkbench = rig["cwb"]
 	var kind: String = set.rel_path
 	var edit := {"op": "set", "kind": kind, "id": sbinder.profile_id, "key": "auto_bunny_hop", "value": true}
 	var srt := swb.api.runtime as DotProfileRuntime
