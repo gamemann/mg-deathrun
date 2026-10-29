@@ -8,8 +8,6 @@ examples/dedicated.gd::_test_the_course_vote	107
 examples/headless_courses.gd::_test_teleport_pad	115
 examples/headless_net.gd::_build	91
 examples/headless_net.gd::_test_a_hit_is_the_shooters	102
-examples/headless_run.gd	1413
-examples/headless_run.gd::_test_the_hud	99
 game/dr_catalogue.gd::practice	133
 game/dr_client.gd	1699
 game/dr_client.gd::_build_netcode	86
