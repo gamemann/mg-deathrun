@@ -293,6 +293,22 @@ func _test_the_hud() -> void:
 		"%s low=%s" % [hud.vitals.number_text(), str(hud.vitals.is_low())]
 	)
 
+	_hud_chat_and_theme_checks(hud)
+
+	# A pack naming these classes does not parse on a shell whose dot-ui predates them, so
+	# the requires.json dot-ci derives must ask for dot-ui 4, and nothing may lower it.
+	var asks := DotAddonApi.derive()
+	_check(
+		int(asks.get("dot_ui", 0)) >= 13 and FileAccess.file_exists("res://" + DotAddonApi.FLOOR_FILE),
+		"the pack asks a shell for dot-ui level 13, the weapon icons (requires.floor.json)",
+		str(asks.get("dot_ui"))
+	)
+	hud.queue_free()
+	_finished()
+
+
+## The HUD under a full chat log, and restyled live by the menu's theme.
+func _hud_chat_and_theme_checks(hud: DrHud) -> void:
 	var chat := DrClient.new_chat()
 	add_child(chat)
 	var w: DotChatWindow = chat.window
@@ -320,17 +336,6 @@ func _test_the_hud() -> void:
 		"keeping this game's accent, and the HUD's own lines follow it too")
 	_t = settings.settings.set_value(&"ui_theme", &"midnight")
 	settings.queue_free()
-
-	# A pack naming these classes does not parse on a shell whose dot-ui predates them, so
-	# the requires.json dot-ci derives must ask for dot-ui 4, and nothing may lower it.
-	var asks := DotAddonApi.derive()
-	_check(
-		int(asks.get("dot_ui", 0)) >= 13 and FileAccess.file_exists("res://" + DotAddonApi.FLOOR_FILE),
-		"the pack asks a shell for dot-ui level 13, the weapon icons (requires.floor.json)",
-		str(asks.get("dot_ui"))
-	)
-	hud.queue_free()
-	_finished()
 
 
 ## The family's rule since the first play test: H opens help in every game, nothing else in
