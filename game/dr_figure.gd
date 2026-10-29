@@ -33,8 +33,6 @@ const DrPaths := preload("dr_paths.gd")
 ## the kit's clips), so it moves with the gun clips and a melee swing; the legs keep walking under
 ## a swing because the figure plays it on the upper body only.
 
-const CHANNEL := "dr.figure"
-
 ## The people a player can be, by the blocky kit's atlas letters (the avatar documents name them).
 ## Only the letter is read: the people are coloured, not textured.
 static var ATLASES: Array[String] = [

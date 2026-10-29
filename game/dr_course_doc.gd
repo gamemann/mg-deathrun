@@ -22,8 +22,6 @@ extends RefCounted
 ## of what it places unless the field's own comment says otherwise. `courses/README.md` is
 ## the mapper's copy of this, with an example of every kind.
 
-const CHANNEL := "dr.doc"
-
 ## The format this build reads. A document written for a later one is refused rather than
 ## half-built, because a part this build has never heard of is a hole in a trap.
 const FORMAT := 1

@@ -17,8 +17,6 @@ const DrAvatars := preload("dr_avatars.gd")
 ## as a death, because a client that decided it had died would be a client that could decide
 ## it had not.
 
-const CHANNEL := "dr.player"
-
 ## Metres above a player's feet that their eyes are.
 ##
 ## Here rather than on the client, because it is where a shot leaves from as well as where
