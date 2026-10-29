@@ -27,7 +27,7 @@ const DrSettings := preload("../game/dr_settings.gd")
 
 const SECTIONS := 31
 
-const CHECKS := 154
+const CHECKS := 155
 
 const TICK_RATE := 64
 const TICK := 1.0 / float(TICK_RATE)
@@ -1217,6 +1217,9 @@ func _test_the_drawn_gun() -> void:
 	_check(action_fig != null and action_fig == me.figure.person and action_fig.has_method(&"skeleton"),
 		"an avatar action and a wearable go on the runner's own person, which can hang a wearable",
 		"%s %s %s" % [action_fig, me.figure, me.figure.person if me.figure != null else null])
+	me.figure.pose(me.global_position, 0.0, 3.0)
+	_check(int(me.figure.person.get("_posed_frame")) == Engine.get_process_frames(),
+		"a posed figure animates by game time, not the wall clock")
 	me.health.alive = false
 	_check(client.call(&"_avatar_figure", 0) == null, "a dead runner has no figure for an action")
 	me.health.alive = true
