@@ -1,6 +1,7 @@
 extends Node
 
 const DrPlayer := preload("dr_player.gd")
+const DrWeaponIcons := preload("dr_weapon_icons.gd")
 
 ## The client's killcam: frames go into [DotKillcamBuffer], decisive moments are noted, and a round ending on one is replayed by [DotKillcam]. Length is `mp_killcam_time`; 0 skips to [signal over].
 
@@ -24,6 +25,9 @@ var feet_fn: Callable = Callable()
 ## `func(p: DrPlayer) -> Color`: the colour of the player's side.
 var colour_fn: Callable = func(_p: Node) -> Color: return Color.WHITE
 
+## Weapon id -> Texture2D or null: the picture beside the weapon's name in the banner.
+var weapon_icon_fn: Callable = func(id: String) -> Texture2D: return DrWeaponIcons.shared.menu_texture(StringName(id))
+
 ## The killcam's length in seconds; 0 disables.
 var seconds_fn: Callable = func() -> float: return 7.0
 
@@ -46,6 +50,8 @@ func _ready() -> void:
 	killcam = DotKillcam.new()
 	killcam.name = "Killcam"
 	killcam.skip_actions = SKIP_ACTIONS
+	killcam.icon_provider = func(id: String) -> Texture2D:
+		return weapon_icon_fn.call(id) if weapon_icon_fn.is_valid() else null
 	add_child(killcam)
 	killcam.started.connect(_on_started)
 	killcam.frame_drawn.connect(_apply)
@@ -72,8 +78,8 @@ func frame() -> void:
 ## A moment worth replaying: [param subject] is whose eyes the replay is behind, [param what]
 ## the banner's words ("reached the end", "caught by a trap"), [param victim] the one a shot
 ## put down or "".
-func note_moment(subject: StringName, what: String, victim: String = "") -> void:
-	buffer.note_event(now_fn.call(), &"moment", {"subject": String(subject), "what": what, "victim": victim})
+func note_moment(subject: StringName, what: String, victim: String = "", weapon_id: StringName = &"") -> void:
+	buffer.note_event(now_fn.call(), &"moment", {"subject": String(subject), "what": what, "victim": victim, "weapon_id": String(weapon_id)})
 
 
 ## The round ended: replay its last moment if there is one to show. False means [signal over]
@@ -92,6 +98,7 @@ func round_ended() -> bool:
 		"killer": String(subject.get(&"display_name")),
 		"victim": String(moment["data"].get("victim", "")),
 		"weapon": String(moment["data"].get("what", "")),
+		"weapon_id": String(moment["data"].get("weapon_id", "")),
 		"hint": "Jump to skip",
 	})
 	if not played.ok:

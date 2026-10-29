@@ -586,11 +586,11 @@ func _on_phase_changed(phase: int) -> void:
 	_broadcast(DrEvents.Kind.PHASE, DrEvents.write_phase(phase))
 
 
-func _on_player_died(player_id: StringName, by: StringName, why: StringName) -> void:
+func _on_player_died(player_id: StringName, by: StringName, why: StringName, weapon_id: StringName) -> void:
 	var who: DrPlayer = game.players.get(player_id) if game != null else null
 	_broadcast(DrEvents.Kind.DEATH, DrEvents.write_death(
 		session_of(player_id), session_of(by) if by != &"" else 0, why,
-		who.death if who != null else null
+		who.death if who != null else null, weapon_id
 	))
 
 
@@ -1163,7 +1163,7 @@ func _on_event(message: DotNetMessage) -> void:
 				if fell != null and death.has("death"):
 					fell.death = death["death"]
 				death_received.emit(
-					int(death["player_id"]), int(death["by"]), death["why"]
+					int(death["player_id"]), int(death["by"]), death["why"], death["weapon_id"]
 				)
 		DrEvents.Kind.HIT:
 			var hit := DrEvents.read_hit(reader)

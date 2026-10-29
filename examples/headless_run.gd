@@ -876,7 +876,7 @@ func _use(game: DrGame, player: DrPlayer, at: Vector3) -> void:
 
 func _deaths(game: DrGame) -> Array:
 	var out: Array = []
-	game.player_died.connect(func(id: StringName, by: StringName, why: StringName) -> void:
+	game.player_died.connect(func(id: StringName, by: StringName, why: StringName, _weapon: StringName) -> void:
 		out.append([id, by, why]))
 	return out
 

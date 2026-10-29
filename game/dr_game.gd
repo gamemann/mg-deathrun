@@ -86,7 +86,7 @@ signal phase_changed(phase: int)
 ## Somebody changed sides: the draw at the top of a round, or a joiner put on one.
 signal side_changed(player_id: StringName, side: int)
 
-signal player_died(player_id: StringName, by: StringName, why: StringName)
+signal player_died(player_id: StringName, by: StringName, why: StringName, weapon_id: StringName)
 
 ## An activator pressed trap [param index]'s button on [param tick].
 signal trap_fired(index: int, tick: int, by: StringName)
@@ -2174,7 +2174,7 @@ func _on_player_died(player: DrPlayer, damage: DotDamage) -> void:
 	if authoritative:
 		player.death = decide_death(player, damage)
 
-	player_died.emit(player.player_id, by, why)
+	player_died.emit(player.player_id, by, why, damage.weapon_id)
 	DotLog.debug(CHANNEL, "player died", {
 		"id": String(player.player_id), "by": String(by), "why": String(why),
 	})

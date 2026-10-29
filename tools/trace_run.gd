@@ -66,7 +66,7 @@ func _run() -> void:
 	game._place_everybody()
 
 	var said: Array = []
-	game.player_died.connect(func(id: StringName, _by: StringName, why: StringName) -> void:
+	game.player_died.connect(func(id: StringName, _by: StringName, why: StringName, _weapon: StringName) -> void:
 		said.append("%s died: %s at %s" % [id, why, (game.players[id] as DrPlayer).controller.state.position]))
 
 	print("course %s, route of %d points" % [course, game.stage.route().size()])

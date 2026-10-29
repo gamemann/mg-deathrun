@@ -2,6 +2,7 @@ extends DotGameCheckSuite
 
 ## The wire rig for headless_net: two worlds, two managers, two bridges and the queues between them, and the suite counters. No `class_name`; the suite extends this.
 
+const DrClient := preload("../game/dr_client.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrConfig := preload("../game/dr_config.gd")
 const DrCourseDoc := preload("../game/dr_course_doc.gd")

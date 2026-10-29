@@ -574,13 +574,13 @@ func _on_trap(index: int, _tick: int, by: int) -> void:
 
 ## The round's last moment, a death or a finish. A shot puts the victim in the shooter's eyes,
 ## anything else (a trap, the pit, a fall) in the victim's own.
-func _note_death(victim: StringName, by: StringName, why: StringName) -> void:
+func _note_death(victim: StringName, by: StringName, why: StringName, weapon_id: StringName = &"") -> void:
 	if killcam == null:
 		return
 	var who: DrPlayer = game.players.get(victim)
 	var name_of := who.display_name if who != null else String(victim)
 	if by != &"" and game.players.has(by) and by != victim:
-		killcam.note_moment(by, "put down", name_of)
+		killcam.note_moment(by, "put down", name_of, weapon_id)
 		return
 	var what := "caught by a trap"
 	match why:
@@ -701,11 +701,11 @@ func _on_round(number: int, began: bool, _winner: int, why: String = "") -> void
 		chat.say_locally(why, Color(0.98, 0.86, 0.40))
 
 
-func _on_death(session_id: int, by: int, why: StringName) -> void:
+func _on_death(session_id: int, by: int, why: StringName, weapon_id: StringName) -> void:
 	var id := DrNetBridge.player_key(session_id)
 	var who: DrPlayer = game.players.get(id)
 
-	_note_death(id, DrNetBridge.player_key(by) if by > 0 else &"", why)
+	_note_death(id, DrNetBridge.player_key(by) if by > 0 else &"", why, weapon_id)
 
 	_hear_death(who, why)
 
@@ -815,8 +815,8 @@ func _hear_the_world() -> void:
 		_on_round(n, true, 0))
 	game.round_over.connect(func(n: int, winner: int, why: String) -> void:
 		_on_round(n, false, winner, why))
-	game.player_died.connect(func(id: StringName, by: StringName, why: StringName) -> void:
-		_note_death(id, by, why)
+	game.player_died.connect(func(id: StringName, by: StringName, why: StringName, weapon_id: StringName) -> void:
+		_note_death(id, by, why, weapon_id)
 		_hear_death(game.players.get(id), why))
 	game.player_finished.connect(func(id: StringName, place: int, seconds: float) -> void:
 		if killcam != null:

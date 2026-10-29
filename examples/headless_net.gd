@@ -16,8 +16,8 @@ extends "headless_net_base.gd"
 ##
 ## Sections and checks are both counted; mg-smash-copter's notes say why the second matters.
 
-const SECTIONS := 15
-const CHECKS := 85
+const SECTIONS := 16
+const CHECKS := 89
 
 
 func _ready() -> void:
@@ -45,6 +45,7 @@ func _run() -> void:
 		await _test_the_toys_reach_the_client()
 		await _test_a_teleport_is_predicted()
 		await _test_leaving()
+		await _test_killcam_icon()
 
 	_test_the_remote_workbench()
 
@@ -751,4 +752,28 @@ func _test_the_remote_workbench() -> void:
 	cwb.queue_free()
 	snet.queue_free()
 	cnet.queue_free()
+	_finished()
+
+
+func _test_killcam_icon() -> void:
+	_section("the killcam banner shows the weapon's icon")
+	var fatal := DrEvents.read_death(DotNetReader.new(DrEvents.write_death(5, 6, DrGame.DIED_SHOT, null, &"rifle")))
+	_check(bool(fatal["ok"]) and fatal["weapon_id"] == &"rifle", "a DEATH carries the weapon id")
+	var client := DrClient.new()
+	client._build_killcam()
+	var kc := client.killcam
+	client.remove_child(kc)
+	add_child(kc)
+	kc.note_moment(&"a", "put down", "Bo", &"rifle")
+	var moment := kc.buffer.last_event(&"moment")
+	_check(moment["data"].get("weapon_id", "") == "rifle", "the moment keeps the weapon id")
+	_check(kc.killcam.icon_provider.is_valid(), "the killcam has an icon provider")
+	var banner := DotKillcamBanner.new()
+	banner.icon_provider = kc.killcam.icon_provider
+	add_child(banner)
+	banner.present({"killer": "A", "weapon": "put down", "weapon_id": "rifle"})
+	_check(banner.icon_rect.visible and banner.icon_rect.texture != null, "the banner shows the rifle's picture")
+	banner.free()
+	kc.free()
+	client.free()
 	_finished()

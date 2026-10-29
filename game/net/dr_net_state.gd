@@ -41,7 +41,7 @@ signal round_changed(number: int, began: bool, winner: int, why: String)
 signal phase_received(phase: int)
 
 ## Somebody died, and what did it.
-signal death_received(player_id: int, by: int, why: StringName)
+signal death_received(player_id: int, by: int, why: StringName, weapon_id: StringName)
 
 ## Somebody was handed, or picked up, a weapon. The HUD names it.
 signal armed_received(player_id: int, weapon_id: StringName)
