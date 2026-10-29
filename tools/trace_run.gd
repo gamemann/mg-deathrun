@@ -4,14 +4,8 @@ const DrConfig := preload("../game/dr_config.gd")
 const DrGame := preload("../game/dr_game.gd")
 const DrPlayer := preload("../game/dr_player.gd")
 
-## Where a stand-in runner is, every so often, as it runs a course with nobody at the buttons —
-## and where and why it stops. The tool every route in `courses/` was tuned with.
-##
-## [codeblock]
-## godot --headless --path . res://tools/trace_run.tscn -- --course=dr_practice --every=0.5
-## [/codeblock]
-##
-## Not a suite: it prints and quits 0 whatever it finds. `headless_courses` is the suite.
+## Where a stand-in runner is, every so often, as it runs a course with nobody at the buttons.
+## Not a suite: it prints and quits 0. `godot --headless --path . res://tools/trace_run.tscn -- --course=dr_practice --every=0.5`
 
 const TICK_RATE := 64
 

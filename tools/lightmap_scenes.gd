@@ -3,25 +3,9 @@ extends Node
 const DrCatalogue := preload("../game/dr_catalogue.gd")
 const DrCourse := preload("../game/dr_course.gd")
 
-## Writes one bake scene per course for dot-lighting's baker: the course built exactly as a
-## client builds it, its still boxes kept (each under the node and mesh name it has at run time,
-## with its second UV set), the sun, the fill and the sky, a LightmapGI added and the course's
-## fingerprint recorded. tools/bake_lightmaps.sh runs this and then the bake; nobody needs to run
-## it alone.
-##
-##   xvfb-run -a godot --path . res://tools/lightmap_scenes.tscn -- --out=res://lightbake_work [--courses=dr_quarry,dr_temple]
-##
-## Under a display, not --headless: a headless process keeps no mesh or image data to save.
-##
-## [b]What the bake sees, and what it must not.[/b] Only pieces [method DrCourse.is_bakeable]
-## says are still and opaque. Movers, turntables, every trap part, the gate, the lethal pieces
-## and the buttons are left out of the scene altogether: they stay dynamic and are lit live by
-## the sun, and the probes the bake generates give them its bounce. Leaving them out also means
-## nothing bakes a shadow or a bounce from a part that is not there a second later. The sun gives
-## only its bounce (BAKE_DYNAMIC) because it stays live (its shadows are how a runner reads where
-## a trap is); dot-lighting's fill is left out (BAKE_DISABLED), being already "more sky", which
-## the environment gives the bake. A course has no lamps. Changing any of that changes what a bake
-## means: bump DrCourse.BAKE_VERSION.
+## Writes one bake scene per course for dot-lighting's baker (run by tools/bake_lightmaps.sh).
+## Needs a display, not --headless. Only still opaque pieces bake; changing that means bumping
+## DrCourse.BAKE_VERSION. See docs/comment-notes.md.
 
 ## Per course: LightmapGI settings for DotLightBake.prepare.
 const SETTINGS := {

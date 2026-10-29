@@ -2,15 +2,7 @@ extends RefCounted
 
 ## Every key this game reads, as one dot-menu [DotMenuBindings] table: the action, the setting
 ## that stores it, the words a player sees, the default, and the card it goes on.
-##
-## [b]A table, because four things read it:[/b] the client matches events against the actions,
-## the settings document stores one binding per row, the menu's Controls page draws a key per
-## row, and the help screen (H) and the HUD's prompts name the key each is on now. Until
-## 2026-10-11 these were keycodes in `DrClient._unhandled_input`.
-##
-## [b]Walk is Shift[/b], for a narrow ledge: dot-player-controller's own walk action, so the
-## sampler reads this row. The chat keys are dot-game's chat window's own actions. H is help,
-## in every game of the family (dot-menu adds the row), so nothing here may default to it.
+## Why a table, and the Shift/H/chat rows: docs/comment-notes.md.
 
 const USE := &"dr_use"
 const RELOAD := &"dr_reload"

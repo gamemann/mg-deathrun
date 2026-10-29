@@ -3,15 +3,9 @@ extends Node
 const DrConfig := preload("../game/dr_config.gd")
 const DrGame := preload("../game/dr_game.gd")
 
-## Two frames of a real client on a real server, to look at: the loading cover while the
-## server still holds the seat as loading, and the first frame after the cover lifts. A
-## dedicated server runs in a second process (this scene with `--role server`); both
-## halves have the same root name because an RPC path is the name.
-##
-## [codeblock]
-## xvfb-run -a godot --path . --resolution 1280x720 res://tools/render_cover.tscn
-## [/codeblock]
-## Writes screenshots/cover_up.png, cover_lifted.png and cover_after_1s.png.
+## Two frames of a real client on a real server: the loading cover up, and just after it lifts.
+## Run `xvfb-run -a godot --path . --resolution 1280x720 res://tools/render_cover.tscn`; writes
+## screenshots/cover_*.png. The server is a second process (`--role server`).
 
 const PORT := 27199
 

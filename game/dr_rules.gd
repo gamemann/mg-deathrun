@@ -1,17 +1,7 @@
 extends DotMatchRules
 
 ## A round ends when the game says so, and the game says who won.
-##
-## [b]dot-match's elimination rule nearly fits, and nearly is the problem.[/b] It ends a round
-## when a side has nobody alive — but a runner who joined mid-round is benched rather than
-## dead, an activator called to the end is alive in a different place, and the clock's winner
-## is a server setting rather than "whoever has more people up". What decides is [DrGame],
-## which knows all of that, and [DotMatchRules] is documented as the place a mode dot-match
-## does not ship goes, with the state machine left alone.
-##
-## [b]The answer is read, never computed here.[/b] dot-match's rules are meant to be pure
-## functions of what they are handed; this one is a pure function of what the game decided,
-## and a game that has not decided returns NONE every tick.
+## The answer is read from [member decision_fn], never computed here: docs/comment-notes.md.
 
 ## `func() -> Dictionary`: `{decided: bool, winner: int}`. Set by [DrGame].
 var decision_fn: Callable = Callable()
@@ -24,10 +14,7 @@ static func make() -> DotMatchRules:
 	rules.id = &"deathrun"
 	rules.display_name = "Deathrun"
 	rules.score_limit = 0
-	# The round keeps its own clock; this one is the BACKSTOP, set by [DrGame] to the
-	# countdown, the round and a minute more. A round the game somehow never decided — a
-	# rule with a hole in it — ends on it as a draw rather than running for ever, and dot-match
-	# stops warning at every boot that nothing but a custom outcome can end a round.
+	# Backstop only: DrGame sets it past the round, so an undecided round ends as a draw.
 	rules.time_limit_sec = 600.0
 	rules.rounds_to_win = 999
 	rules.respawn_disabled = true

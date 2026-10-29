@@ -2,28 +2,9 @@ extends DotMenuSettings
 
 const DrBindings := preload("dr_bindings.gd")
 
-## A player's own settings and the menu that changes them: how fast the view turns, how wide
-## it is, how loud things are, the window, and the look of the menu itself.
-##
-## [codeblock]
-## var settings := DrSettings.new()
-## add_child(settings)
-## settings.setup()                    # loads, and pushes every value at what reads it
-## settings.bind_look(sampler.tunables)
-## settings.bind_camera(camera)
-## settings.bind_audio(audio.manager)
-## settings.open()                     # Escape does this in the client
-## [/codeblock]
-##
-## [b]dot-menu's `DotMenuSettings` with this game's schema[/b] (2026-10-09). It was a 250-line
-## copy of mg-wipeout's file — a manager, a `match` over four keys and a bare settings
-## screen — and the same copy was in five other games. What is left here is what is this
-## game's: where the document lives, and the stock keys it has nothing to apply to.
-##
-## [b]The scopes are the family's, not this game's.[/b] `sensitivity` is ACCOUNT under the
-## shared `tmc_account` namespace — a person's hand, the same number in every game here.
-## `field_of_view` is SERVER_CLAMPED: a wide view is an advantage a server may cap, and
-## dot-settings gives a server no way to READ it. The volumes are this machine's.
+## A player's own settings and the menu that changes them, on dot-menu's `DotMenuSettings`.
+## Call `setup()`, then `bind_look`, `bind_camera` and `bind_audio`; `open()` shows the menu.
+## Why the scopes are the family's: docs/comment-notes.md.
 
 const SCHEMA_VERSION := 1
 

@@ -4,16 +4,8 @@ const DrGame := preload("dr_game.gd")
 const DrWeaponIcons := preload("dr_weapon_icons.gd")
 const DrPlayer := preload("dr_player.gd")
 
-## The clock, which side you are on, how many of each are left, and — at the buttons — which
-## traps you still have and which one you are looking at.
-##
-## [b]The activator's list of traps is the number they cannot read off the world.[/b] A
-## button's cap goes red when its trap is spent, but the activator is watching the runners and
-## not the caps; a list down the side says what is left without a turn of the head, and the
-## line in the middle says which button E would press right now, before it is pressed.
-##
-## [b]Health only at the end.[/b] Nothing on a course hurts a little — a trap is a death — so a
-## health number there would be a number that never moves.
+## The clock, which side you are on, how many of each are left, and at the buttons which traps
+## you still have and which one you are looking at. Health shows only at the end: docs/comment-notes.md.
 
 # No `const CHANNEL`. This draws numbers from state somebody else owns and has nothing an
 # operator would act on; a channel declared and never used is a file that meant to say
@@ -95,10 +87,8 @@ static func piece_theme() -> Theme:
 	return t
 
 
-## The Escape menu, whose theme this HUD follows (dot-menu's `follow_hud`): the menu sets the
-## theme on the HUD's root now and at every theme change, and applies the player's HUD size.
-## Christian's first play test (2026-10-11) asked for a darker HUD a player can restyle in
-## the menu. Duck-typed and called by name, for a client shell older than dot-menu 7.
+## The Escape menu, whose theme this HUD follows (dot-menu's `follow_hud`). Duck-typed and
+## called by name, for a client shell older than dot-menu 7.
 var _menu: Object = null
 
 

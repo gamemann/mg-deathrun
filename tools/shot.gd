@@ -1,20 +1,8 @@
 extends Node
 
-## Renders the game and saves a frame. The check no assertion in this repository makes.
-##
-##   tools/shot.sh                                  # a runner's own eyes, a few seconds in
-##   tools/shot.sh --view=course --dr-course-ids=dr_ice_works   # a course, from above
-##   tools/shot.sh --view=start                     # the start, from behind the runners
-##   tools/shot.sh --view=activator                 # the walkway, from the activator's eyes
-##   tools/shot.sh --view=button                    # the activator at a button: the key prompt
-##   tools/shot.sh --view=button --spent            # ...once that trap is spent
-##   tools/shot.sh --view=trap --trap=ice_jaws --after=0.5   # a trap, half a second after its press
-##   tools/shot.sh --view=third                     # third person, mid-course
-##   tools/shot.sh --view=cover                     # the loading cover, before it lifts
-##   tools/shot.sh --view=end                       # the end arena, from a runner who made it
-##   tools/shot.sh --view=killcam --seconds=2       # the round's last moment replayed; --seconds=7.5 for the podium
-##
-## Any `--dr-*` is the game's own configuration (see `DrConfig`), because `DrClient` reads it.
+## Renders the game and saves a frame: the check no assertion here makes. Views and flags are
+## listed in docs/comment-notes.md; `tools/shot.sh --view=course --dr-course-ids=dr_ice_works`
+## is the usual form. Any `--dr-*` is the game's own configuration (see `DrConfig`).
 
 const DrCourseDoc := preload("../game/dr_course_doc.gd")
 const DrCatalogue := preload("../game/dr_catalogue.gd")
