@@ -832,20 +832,13 @@ func _wire_progress(world: DrGame) -> void:
 	if bridge == null:
 		return
 
-	# What a player keeps is filed under their scoped profile key, so it outlives the
-	# connection; see [DrProgress]. Nothing for a stand-in or a guest, who keep their seat's.
+	# Filed under dot-game's stable per-server key (guests too), so it outlives the connection
+	# and a restart; see [DrProgress].
 	if world.progress != null:
 		world.progress.durable_key_fn = func(id: StringName) -> String:
 			var session := server.session_by_userid(DrNetBridge.session_of(id)) \
 				if server != null else null
-			var platform: Object = server.modules.get_module("platform") \
-				if server != null and server.modules != null else null
-
-			if session == null or platform == null or not platform.has_method("player_for"):
-				return ""
-
-			var held: Variant = platform.call("player_for", session)
-			return str((held as Object).call("key")) if held is Object else ""
+			return String(stats_feed.key_for(session)) if session != null and stats_feed != null else ""
 
 	world.achievement_earned.connect(func(id: StringName, title: String, points: int) -> void:
 		var peer_id: int = bridge.call("peer_for_player", DrNetBridge.session_of(id))
