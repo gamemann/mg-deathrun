@@ -57,6 +57,12 @@ var stats: DotStatsTracker = null
 var achievements: DotAchievementTracker = null
 var link: DotAchievementStatsLink = null
 
+## Kills and hits by body zone through dot-stats' event feed; ids are world entity ids, resolved by [member entity_key_fn].
+var feed: DotStatsEventFeed = null
+
+## `func(entity_id: int) -> StringName`: the player id an entity belongs to. Set by [DrGame].
+var entity_key_fn: Callable = Callable()
+
 ## The world's own dictionaries, shared. See [DrSpectate] for why not a reference to it.
 var players: Dictionary = {}
 var sides: Dictionary = {}
@@ -90,6 +96,7 @@ static func ids() -> Array[StringName]:
 ## rounds played are inputs to a ratio rather than figures anybody reads.
 static func schema() -> DotStatsSchema:
 	var out := DotStatsSchema.new()
+	var _zones := DotStatsHitzones.declare(out)
 	_add(out, ROUNDS_PLAYED, DotStatsDef.Kind.COUNTER, "Rounds played", "rounds", false)
 	_add(out, ROUNDS_WON, DotStatsDef.Kind.COUNTER, "Rounds won", "rounds", true)
 	_add(out, RUNS_FINISHED, DotStatsDef.Kind.COUNTER, "Courses finished", "courses", true)
@@ -219,6 +226,9 @@ func setup(directory: String, report: bool) -> DotResult:
 	stats.define_on_start = report
 	add_child(stats)
 
+	feed = DotStatsEventFeed.new(stats)
+	feed.key_of = _feed_key
+
 	var counted := stats.start()
 
 	if not counted.ok:
@@ -293,6 +303,38 @@ func record(player_id: StringName, stat: StringName, value: float = 1.0) -> void
 
 ## The key a player's numbers are filed under. Asked of [member durable_key_fn] once, then
 ## remembered; see the class note.
+## The tracker key for an entity id, or &"" for anybody not counted (a stand-in, the world).
+func _feed_key(entity_id: Variant) -> StringName:
+	if not entity_key_fn.is_valid():
+		return &""
+
+	var player_id := StringName(entity_key_fn.call(int(entity_id)))
+	var body: DrPlayer = players.get(player_id)
+
+	if body == null or body.is_bot:
+		return &""
+
+	var key := _key(player_id)
+
+	if not stats.has_player(key):
+		stats.begin(key, body.display_name)
+		_begin(key)
+
+	return key
+
+
+## A landed hit, filed by body zone (and wall or body crossed) through the dot-stats hook.
+func report_damage(damage: DotDamage) -> void:
+	if feed != null and stats != null and _feed_key(damage.attacker) != &"":
+		var _filed := DotStatsDamage.report(feed, damage)
+
+
+## A player kill for the head-to-head table; the feed refuses world deaths and suicides.
+func report_kill(killer: int, victim: int, weapon: String) -> void:
+	if feed != null and stats != null and killer != 0 and _feed_key(killer) != &"":
+		var _ok := feed.report_kill(killer, victim, weapon)
+
+
 func _key(player_id: StringName) -> StringName:
 	if _keys.has(player_id):
 		return _keys[player_id]

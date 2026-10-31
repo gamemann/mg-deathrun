@@ -560,6 +560,7 @@ func _build_progress() -> void:
 	progress.name = "Progress"
 	progress.players = players
 	progress.sides = sides
+	progress.entity_key_fn = func(entity_id: int) -> StringName: return entities.key_for_id(entity_id)
 	add_child(progress)
 
 	var ready_now := progress.setup(config.progress_directory, config.report_progress)
@@ -2166,6 +2167,7 @@ func _on_player_died(player: DrPlayer, damage: DotDamage) -> void:
 
 	if progress != null:
 		progress.on_died(player.player_id, by, why)
+		progress.report_kill(damage.attacker, player.entity_id, String(damage.weapon_id))
 
 	if match_node != null and DotEntity.is_kind(player.entity_id, DotEntity.KIND_PLAYER):
 		match_node.report_kill(String(by), String(player.player_id), why, _tick)
@@ -2257,4 +2259,6 @@ func _note_hits(shooter: DrPlayer, shot: DotShot) -> void:
 	for damage: DotDamage in shot.damages:
 		if damage == null or damage.refused or damage.health_lost <= 0.0 or damage.victim == shooter.entity_id:
 			continue
+		if progress != null:
+			progress.report_damage(damage)
 		hit_landed.emit(shooter.player_id, damage.point, damage.lethal, damage.hit_group == DotHitGroup.HEAD)
