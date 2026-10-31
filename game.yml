@@ -35,6 +35,7 @@ cvars:
   dr_players_per_activator: "10"
   dr_bots: "1"
   bot_quota: "3"
+  stats_report: "0"
 
 # This game's maps are small documents the server sends each client, so a host fetches the
 # map packs its server owner names BEFORE the game loads (into the server-only packs)
