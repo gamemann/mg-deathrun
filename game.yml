@@ -42,3 +42,8 @@ cvars:
 # rather than on a map change: nobody is admitted to a server playing only the built-in map.
 metadata:
   maps_delivery: server
+
+# The stock courses pack the game suggests, not requires: a server offers it by default (suggested_maps: none turns that off)
+# and the Workshop mounts it for solo play unless the player opts out (--no-suggested, --suggested=none).
+suggested:
+  - maps=gamemann/mg-deathrun-maps
